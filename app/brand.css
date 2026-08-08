@@ -1,0 +1,625 @@
+/* =============================================================================
+   Countercheck — brand tokens
+   Implements DESIGN.md. Read that first; this file is the machine-readable half.
+
+   Layers, in cascade order:
+     1. Non-theme tokens      type, space, radius, motion, layout   (:root)
+     2. Raw palette, light    --cc-*                                (:root, [data-theme="light"])
+     3. Raw palette, dark     --cc-*                                (media query + [data-theme="dark"])
+     4. Semantic tokens       --severity-high, --state-accepted, …  (:root, [data-theme])
+     5. The few base rules that are too easy to get wrong
+
+   Naming: --cc-* is a raw colour and should almost never be used directly.
+   Unprefixed tokens are semantic — those are the ones application code names.
+
+   No @font-face, no @import, no url(), no external asset of any kind. Fonts
+   arrive as CSS variables from next/font/google, which self-hosts at build time;
+   every stack below falls back to system faces if the loader is not wired up.
+
+   Contrast: every foreground/background pair used here is verified against
+   WCAG 2.1 AA (4.5:1 text, 3:1 meaning-bearing non-text) on --paper, --sheet
+   and --evidence-row-bg, in both themes. Figures are tabulated in DESIGN.md §4.
+   Do not add a colour without redoing that arithmetic.
+   ========================================================================== */
+
+
+/* =============================================================================
+   1. NON-THEME TOKENS
+   ========================================================================== */
+
+:root {
+
+  /* --- Typefaces -----------------------------------------------------------
+     Fraunces is variable. It is always used with WONK and SOFT at 0 — the
+     default axes are BrainIT's voice, not this product's. Apply
+     --font-display-settings wherever --font-display is used.                */
+
+  /* The var() fallbacks are load-bearing: without them, an undefined
+     --font-fraunces would make the whole --font-display declaration invalid at
+     computed-value time and take the system stack down with it. */
+
+  --font-display: var(--font-fraunces, Fraunces), Georgia, "Times New Roman", Times, serif;
+  --font-body: var(--font-plex-sans, "IBM Plex Sans"), -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: var(--font-dm-mono, "DM Mono"), ui-monospace, SFMono-Regular, "SF Mono",
+    Menlo, Consolas, "Liberation Mono", monospace;
+
+  --font-display-settings: "SOFT" 0, "WONK" 0;
+
+  /* --- Type scale ----------------------------------------------------------
+     Root is 106.25% of the browser default = 17px, set as a percentage so a
+     reader who has enlarged their browser font still gets it scaled. Every
+     step below is rem, so every step scales with them.
+     Floor: nothing below 12px. No figure below 15px.                        */
+
+  --text-3xs:  0.71rem;   /* 12px — currency-code slot, footnote markers. Floor. */
+  --text-2xs:  0.76rem;   /* 13px — chip labels, table column headers, rule ids  */
+  --text-xs:   0.88rem;   /* 15px — evidence-table cells, secondary meta         */
+  --text-base: 1rem;      /* 17px — body, finding explanations, buttons, inputs  */
+  --text-md:   1.12rem;   /* 19px — amount at stake, finding title, sub-heads    */
+  --text-lg:   1.35rem;   /* 23px — section headings, totals                     */
+  --text-xl:   1.71rem;   /* 29px — page title                                   */
+  --text-2xl:  2.12rem;   /* 36px — headline figure in a run summary             */
+  --text-3xl:  2.71rem;   /* 46px — one figure, one screen. Never twice a page.  */
+
+  --leading-tight:   1.15;  /* figures ≥ --text-lg, page titles */
+  --leading-snug:    1.3;   /* headings, table cells, chips      */
+  --leading-normal:  1.55;  /* finding explanations, body copy   */
+  --leading-relaxed: 1.7;   /* long-form help and policy pages   */
+
+  --weight-regular: 400;
+  --weight-medium:  500;    /* matched figures, totals, button labels */
+  --weight-semi:    600;    /* page title only. Nothing above this.   */
+
+  --tracking-caps: 0.08em;  /* uppercase mono micro-labels only */
+
+  /* --- Space ---------------------------------------------------------------
+     Pixels, not rem, and deliberately so: hairlines, column edges and table
+     gridlines must land on whole device pixels, and a data table that reflows
+     its gutters when the reader bumps their font size loses its alignment.  */
+
+  --space-0: 0;
+  --space-1: 4px;   /* currency slot → figure; chip glyph → chip word          */
+  --space-2: 8px;   /* chip padding; micro-label → value; chip → chip          */
+  --space-3: 12px;  /* finding title → explanation; evidence cell padding-y    */
+  --space-4: 16px;  /* explanation → evidence table; evidence cell padding-x   */
+  --space-5: 24px;  /* padding inside a finding block; table → decision bar    */
+  --space-6: 32px;  /* between one finding and the next                        */
+  --space-7: 48px;  /* section heading → its section                           */
+  --space-8: 64px;  /* page top gutter; between major page regions             */
+  --space-9: 96px;  /* around the dropzone on an empty page; above the footer  */
+
+  /* --- Fixed dimensions --------------------------------------------------- */
+
+  --row-h:         44px;   /* evidence-table body row                          */
+  --row-h-head:    32px;   /* evidence-table header row                        */
+  --control-h:     40px;   /* buttons, inputs, selects                         */
+  --control-h-sm:  32px;   /* filter controls, table-level toggles             */
+
+  --page-max:      1180px;
+  --measure-prose: 68ch;   /* any paragraph, including finding explanations    */
+  --rail-w:        248px;  /* filter rail; appears only at ≥ --bp-rail         */
+
+  /* Evidence-table column widths. SUPPLIER and REFERENCE are flexible. */
+  --col-date:    11ch;
+  --col-invoice: 16ch;
+  --col-bank:     9ch;
+  --col-amount:  14ch;
+  --col-supplier-min: 18ch;
+
+  --bp-stack: 720px;   /* below this the evidence table becomes a stacked list */
+  --bp-rail: 1100px;   /* at or above this the filter rail appears             */
+
+  /* --- Severity bar widths -------------------------------------------------
+     The left border of a finding block. This is signal 3 of 4 — see DESIGN.md
+     §7. Severity is NEVER carried by colour alone.                          */
+
+  --severity-bar-w-high:   5px;
+  --severity-bar-w-medium: 3px;
+  --severity-bar-w-low:    2px;
+
+  /* --- Rank glyph ----------------------------------------------------------
+     Three stems, filled from the left: 3 high, 2 medium, 1 low. Signal 2 of 4.
+     Drawn in CSS. No icon font, no SVG, no image.                           */
+
+  --rank-stem-w: 3px;
+  --rank-stem-h: 11px;
+  --rank-gap:    2px;
+
+  /* --- Radius --------------------------------------------------------------
+     This is the entire scale. There is no --radius-full, there are no pills.
+     Documents have square corners.                                          */
+
+  --radius-xs: 2px;   /* chips, buttons, inputs        */
+  --radius-sm: 3px;   /* finding blocks, panels, tables */
+
+  /* --- Motion --------------------------------------------------------------
+     Only opacity and transform are animated. Data never animates in.
+     Overridden to 1ms under prefers-reduced-motion, at the bottom of this file. */
+
+  --dur-fast: 90ms;    /* hover, focus, chip state                   */
+  --dur-base: 140ms;   /* a finding collapsing after a decision      */
+  --dur-slow: 220ms;   /* overlay entry only                         */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* --- Stacking ----------------------------------------------------------- */
+
+  --z-header: 10;
+  --z-sticky-thead: 20;
+  --z-overlay: 100;
+  --z-toast: 200;
+}
+
+
+/* =============================================================================
+   2. RAW PALETTE — LIGHT
+   ========================================================================== */
+
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+
+  /* surfaces */
+  --cc-paper:      #F4F5F2;   /* the desk                                     */
+  --cc-sheet:      #FFFFFF;   /* a document                                   */
+  --cc-evidence:   #EFF1EC;   /* a row out of the customer's own export       */
+  --cc-match:      #F0D385;   /* highlighter over a cell that triggered a rule */
+
+  /* rules */
+  --cc-line:        #C7CCC5;  /* DECORATIVE ONLY — 1.43–1.63:1, sub-3:1       */
+  --cc-line-strong: #7C837D;  /* meaning-bearing — 3.42:1 worst case          */
+
+  /* ink ramp */
+  --cc-ink-900: #14181B;      /* 15.70:1 worst case */
+  --cc-ink-700: #4E555A;      /*  6.66:1            */
+  --cc-ink-500: #676E74;      /*  4.55:1            */
+  --cc-ink-400: #7E848A;      /*  3.32:1 (disabled) */
+
+  /* accent — ledger blue */
+  --cc-blue-ink:   #1C3F5C;   /*  9.64:1 worst case */
+  --cc-blue-focus: #0F5C8C;   /*  6.30:1 worst case */
+  --cc-on-fill:    #FFFFFF;   /* label on an accent or ink fill */
+
+  /* severity — iron oxide / dark ochre / slate. No green: see DESIGN.md §3.5 */
+  --cc-red:         #9E2B21;  --cc-red-wash:    #FAEAE7;   /* 6.38:1 on wash */
+  --cc-ochre:       #8A5A0B;  --cc-ochre-wash:  #F8EFDC;   /* 5.18:1 on wash */
+  --cc-slate:       #4C6879;  --cc-slate-wash:  #E9EFF3;   /* 5.08:1 on wash */
+
+  /* review state — an auditor's tick and a set-aside, not success and failure */
+  --cc-green:       #1E5B41;  --cc-green-wash:  #E4EFE8;   /* 6.78:1 on wash */
+  --cc-grey:        #5C6367;  --cc-grey-wash:   #EDEEEC;   /* 5.25:1 on wash */
+
+  /* figures */
+  --cc-teal: #0F5C55;         /* credit notes — distinct from the tick green  */
+
+  --cc-selection: #DCE7F0;
+
+  --cc-shadow-overlay:
+    0 8px 24px -6px rgb(20 24 27 / 0.18),
+    0 2px 6px -2px rgb(20 24 27 / 0.12);
+}
+
+
+/* =============================================================================
+   3. RAW PALETTE — DARK
+   Applied when the OS asks for it (unless the app has pinned light), and
+   whenever [data-theme="dark"] is present. Both directions are explicit.
+   ========================================================================== */
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --cc-paper:      #101417;
+    --cc-sheet:      #171C20;
+    --cc-evidence:   #1D2429;
+    --cc-match:      #3B3720;
+
+    --cc-line:        #3A444A;
+    --cc-line-strong: #6E7A80;
+
+    --cc-ink-900: #E7EAE8;
+    --cc-ink-700: #A6AFB4;
+    --cc-ink-500: #8B959B;
+    --cc-ink-400: #6C767C;
+
+    --cc-blue-ink:   #93B9D8;
+    --cc-blue-focus: #A8C9E4;
+    --cc-on-fill:    #171C20;
+
+    --cc-red:         #F0958A;  --cc-red-wash:    #2E1D1B;
+    --cc-ochre:       #E2A63F;  --cc-ochre-wash:  #2C2416;
+    --cc-slate:       #7E9EB4;  --cc-slate-wash:  #1B2830;
+
+    --cc-green:       #6DC49B;  --cc-green-wash:  #16281F;
+    --cc-grey:        #98A1A6;  --cc-grey-wash:   #20262A;
+
+    --cc-teal: #5FC2B4;
+
+    --cc-selection: #24384A;
+
+    --cc-shadow-overlay:
+      0 10px 28px -6px rgb(0 0 0 / 0.62),
+      0 0 0 1px #3A444A;
+  }
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --cc-paper:      #101417;
+  --cc-sheet:      #171C20;
+  --cc-evidence:   #1D2429;
+  --cc-match:      #3B3720;
+
+  --cc-line:        #3A444A;
+  --cc-line-strong: #6E7A80;
+
+  --cc-ink-900: #E7EAE8;
+  --cc-ink-700: #A6AFB4;
+  --cc-ink-500: #8B959B;
+  --cc-ink-400: #6C767C;
+
+  --cc-blue-ink:   #93B9D8;
+  --cc-blue-focus: #A8C9E4;
+  --cc-on-fill:    #171C20;
+
+  --cc-red:         #F0958A;  --cc-red-wash:    #2E1D1B;
+  --cc-ochre:       #E2A63F;  --cc-ochre-wash:  #2C2416;
+  --cc-slate:       #7E9EB4;  --cc-slate-wash:  #1B2830;
+
+  --cc-green:       #6DC49B;  --cc-green-wash:  #16281F;
+  --cc-grey:        #98A1A6;  --cc-grey-wash:   #20262A;
+
+  --cc-teal: #5FC2B4;
+
+  --cc-selection: #24384A;
+
+  --cc-shadow-overlay:
+    0 10px 28px -6px rgb(0 0 0 / 0.62),
+    0 0 0 1px #3A444A;
+}
+
+
+/* =============================================================================
+   4. SEMANTIC TOKENS
+   These are what application code should reference. They resolve lazily, so a
+   nested [data-theme] re-resolves them correctly for its own subtree.
+   ========================================================================== */
+
+:root,
+[data-theme] {
+
+  /* --- Surfaces ----------------------------------------------------------- */
+
+  --paper: var(--cc-paper);   /* the page                                     */
+  --sheet: var(--cc-sheet);   /* a document: findings, panels, tables         */
+
+  /* A row quoted from the customer's own export. Used nowhere else — this
+     tint means "this is your data, not ours". No zebra striping: every
+     evidence row gets this, and the only varying tint in the table is the
+     matched cell below.                                                     */
+  --evidence-row-bg: var(--cc-evidence);
+
+  /* Only the cells that actually triggered the rule — never a whole row.
+     A 1.31:1 step, so it is not load-bearing on its own: DESIGN.md §10.2
+     requires it to be paired with a 2px severity bottom border and a
+     visually-hidden "matched" string.                                       */
+  --evidence-cell-match-bg: var(--cc-match);
+
+  /* --- Rules ---------------------------------------------------------------
+     Two, and the distinction is a rule not a preference. If losing a line
+     would lose information, it must be --line-strong. If unsure, --line-strong. */
+
+  --line: var(--cc-line);               /* decorative only, sub-3:1           */
+  --line-strong: var(--cc-line-strong); /* anything meaning-bearing, ≥3:1     */
+
+  --rule-hair:  1px solid var(--line);
+  --rule:       1px solid var(--line-strong);
+  --rule-total: 3px double var(--line-strong);  /* above a total, and only there */
+
+  /* --- Ink -----------------------------------------------------------------
+     A figure is never --ink-muted. If a number matters little enough to be
+     greyed out, it should not be on the screen.                             */
+
+  --ink: var(--cc-ink-900);          /* all figures, all body text            */
+  --ink-muted: var(--cc-ink-700);    /* supporting text, second lines         */
+  --ink-faint: var(--cc-ink-500);    /* micro-labels and column headers only  */
+  --ink-disabled: var(--cc-ink-400); /* disabled control labels, nothing else */
+
+  /* --- Accent --------------------------------------------------------------
+     Deliberately quiet. Nearly unnoticeable in a screenshot of the review
+     queue — the severity ramp needs the colour budget.                      */
+
+  --accent: var(--cc-blue-ink);
+  --accent-contrast: var(--cc-on-fill);
+  --focus-ring: var(--cc-blue-focus);
+
+  /* --- Severity ------------------------------------------------------------
+     Matches Severity = "high" | "medium" | "low" in src/types.ts.
+     Colour is signal 4 of 4 and the weakest. It is never introduced without
+     the word, the rank glyph and the bar width. See DESIGN.md §7.           */
+
+  --severity-high:      var(--cc-red);     /* money is out of the door, or about to be */
+  --severity-medium:    var(--cc-ochre);   /* wrong, but recoverable or unconfirmed    */
+  --severity-low:       var(--cc-slate);   /* not an error — a question worth asking   */
+
+  --severity-high-bg:   var(--cc-red-wash);
+  --severity-medium-bg: var(--cc-ochre-wash);
+  --severity-low-bg:    var(--cc-slate-wash);
+
+  --rank-stem-empty: var(--line-strong);   /* unfilled stems in the rank glyph */
+
+  /* --- Review state --------------------------------------------------------
+     NOT red/green success/failure, and this is deliberate. "Accepted" means
+     the finding is real, which is bad news. "Rejected" means it is fine,
+     which is good news and also means Countercheck was wrong. A good/bad
+     mapping would be backwards and would nudge the reviewer. So these are
+     equal in weight and non-evaluative. The green is an auditor's tick —
+     checked, recorded, agreed — not "good".                                 */
+
+  --state-open:     var(--cc-ink-700);   /* identical to --ink-muted, on purpose:
+                                            an open finding is not a state, it is
+                                            the absence of one                   */
+  --state-accepted: var(--cc-green);
+  --state-rejected: var(--cc-grey);
+
+  --state-open-bg:     var(--cc-evidence);
+  --state-accepted-bg: var(--cc-green-wash);
+  --state-rejected-bg: var(--cc-grey-wash);
+
+  /* --- Figures -------------------------------------------------------------
+     Colour is the SECONDARY signal on a credit. The primary signal is
+     accounting parentheses — see .cc-money below and DESIGN.md §6.4.        */
+
+  --figure-ink: var(--cc-ink-900);
+  --figure-credit: var(--cc-teal);
+
+  /* --- Misc ---------------------------------------------------------------- */
+
+  --selection-bg: var(--cc-selection);
+
+  /* Structure is never expressed with shadow. This token is permitted on
+     exactly two things: a modal dialog and a dropdown/popover.              */
+  --shadow-overlay: var(--cc-shadow-overlay);
+}
+
+
+/* =============================================================================
+   5. BASE RULES
+   Only the things that are too easy to get wrong, or that must not be
+   re-implemented per component. Everything else belongs to the app.
+   ========================================================================== */
+
+html {
+  /* 17px at default settings, as a percentage so a reader who has enlarged
+     their browser font still gets it scaled. See DESIGN.md §5.2. */
+  font-size: 106.25%;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  font-weight: var(--weight-regular);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--selection-bg);
+  color: var(--ink);
+}
+
+/* Never removed, never weakened, never replaced with a box-shadow ring that
+   forced-colours mode will drop. --focus-ring clears 3:1 against every surface
+   in both themes (worst case 6.30:1 light, 9.08:1 dark). */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Display face is always axis-locked. Never ship default-axis Fraunces. */
+.cc-display {
+  font-family: var(--font-display);
+  font-variation-settings: var(--font-display-settings);
+  line-height: var(--leading-tight);
+}
+
+/* --- Figures ---------------------------------------------------------------
+   Every number in the product, without exception — including numbers inside
+   running sentences, which are wrapped in .cc-fig so they read as a quotation
+   from the ledger, because that is what they are.                          */
+
+.cc-fig {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--figure-ink);
+}
+
+/* Identifiers — invoice numbers, references, bank digits. slashed-zero so 0
+   and O cannot be confused when someone reads a number down the phone. */
+.cc-id {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums lining-nums slashed-zero;
+}
+
+.cc-money {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--figure-ink);
+  text-align: right;
+  white-space: nowrap;
+  min-inline-size: var(--col-amount);
+}
+
+/* Accounting parentheses are the PRIMARY signal on a credit; the teal is
+   secondary, so a monochrome printout still reads correctly. Render the text
+   content as "(240.00)". */
+.cc-money--credit {
+  color: var(--figure-credit);
+}
+
+/* Positives reserve the closing-parenthesis column so decimal points still
+   line up against credits. Do not solve this with per-cell padding. */
+.cc-money--positive::after {
+  content: ")";
+  visibility: hidden;
+}
+
+/* The currency code sits in its own fixed slot to the left of the figure —
+   not glued to the digits, and never a symbol: real AP exports carry mixed
+   currencies, and a variable-width symbol breaks the digit column. */
+.cc-ccy {
+  font-family: var(--font-mono);
+  font-size: var(--text-3xs);
+  color: var(--ink-faint);
+  display: inline-block;
+  inline-size: 4ch;
+  margin-inline-end: var(--space-1);
+  text-align: left;
+}
+
+/* --- Uppercase micro-label --------------------------------------------------
+   Chip labels, evidence-table column headers, rule identifiers. Three words
+   maximum — never a sentence.                                              */
+
+.cc-caps {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  line-height: var(--leading-snug);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+}
+
+/* --- Rank glyph -------------------------------------------------------------
+   Signal 2 of 4. Three stems, filled from the left: 3 high, 2 medium, 1 low.
+   The COUNT is the signal; the colour is inherited from the chip.
+
+     <span class="cc-rank" aria-hidden="true"><i data-on></i><i data-on></i><i></i></span>
+     <span class="cc-caps">MEDIUM</span>
+
+   The word beside it is real text and carries the meaning for screen readers,
+   for search, and for anyone reading a greyscale printout.                 */
+
+.cc-rank {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: var(--rank-gap);
+}
+
+.cc-rank > i {
+  display: block;
+  inline-size: var(--rank-stem-w);
+  block-size: var(--rank-stem-h);
+  background: var(--rank-stem-empty);
+}
+
+.cc-rank > i[data-on] {
+  background: currentColor;
+}
+
+/* --- Visually hidden --------------------------------------------------------
+   Used to give a screen reader the information a sighted reader gets from the
+   matched-cell tint. Not display:none — it must reach the accessibility tree. */
+
+.cc-sr {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+
+/* =============================================================================
+   6. REDUCED MOTION
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  :root,
+  [data-theme] {
+    --dur-fast: 1ms;
+    --dur-base: 1ms;
+    --dur-slow: 1ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+
+/* =============================================================================
+   7. PRINT
+   The evidence pack gets printed and taken into a conversation with a supplier.
+   Print is a supported output, not an afterthought.
+
+   Selector note: :root:not([hidden]) has specificity (0,2,0), matching the
+   :root:not([data-theme="light"]) rule inside the dark media query — which can
+   be live while printing. Equal specificity, later in source, so light wins.
+   ========================================================================== */
+
+@media print {
+  :root:not([hidden]),
+  [data-theme]:not([hidden]) {
+    color-scheme: light;
+
+    --cc-paper:      #FFFFFF;
+    --cc-sheet:      #FFFFFF;
+    --cc-evidence:   #FFFFFF;   /* flattens; the rules carry the structure */
+    --cc-match:      transparent;
+
+    --cc-line:        #C7CCC5;
+    --cc-line-strong: #7C837D;
+
+    --cc-ink-900: #14181B;
+    --cc-ink-700: #4E555A;
+    --cc-ink-500: #676E74;
+    --cc-ink-400: #7E848A;
+
+    --cc-blue-ink:   #1C3F5C;
+    --cc-blue-focus: #0F5C8C;
+    --cc-on-fill:    #FFFFFF;
+
+    --cc-red:         #9E2B21;  --cc-red-wash:    #FFFFFF;
+    --cc-ochre:       #8A5A0B;  --cc-ochre-wash:  #FFFFFF;
+    --cc-slate:       #4C6879;  --cc-slate-wash:  #FFFFFF;
+
+    --cc-green:       #1E5B41;  --cc-green-wash:  #FFFFFF;
+    --cc-grey:        #5C6367;  --cc-grey-wash:   #FFFFFF;
+
+    --cc-teal: #0F5C55;
+
+    --cc-selection: #DCE7F0;
+
+    --cc-shadow-overlay: none;
+  }
+
+  /* The highlighter cannot be relied on through a greyscale printer, so the
+     mark becomes an underline. */
+  .cc-cell--matched {
+    background: transparent !important;
+    text-decoration: underline;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 3px;
+  }
+
+  /* A finding must never straddle a page. */
+  .cc-finding {
+    break-inside: avoid;
+    box-shadow: none !important;
+  }
+}

@@ -1,0 +1,562 @@
+/*
+ * Countercheck — structure.
+ *
+ * Colour, type and rhythm come from brand.css, which is imported before this
+ * file; DESIGN.md explains the reasoning and carries the verified contrast
+ * tables. Nothing below names a raw colour — every value here is one of that
+ * file's semantic tokens, so a palette change is a change to one file.
+ *
+ * The look is an audit working paper, not a dashboard. Figures are always
+ * tabular and monospaced, because a column of amounts that does not line up is a
+ * column nobody scans.
+ */
+
+:root {
+  --gap: 1.25rem;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.05), 0 8px 24px -18px rgb(0 0 0 / 0.35);
+}
+
+/* Overrides brand.css's 106.25%. Read on a large monitor with reading glasses;
+   the whole scale is relative, so raising the root raises everything in
+   proportion rather than special-casing a dozen sizes. */
+html { font-size: 19px; }
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* A faint ruled ground, the way a working paper is ruled. Sits under everything
+   and is invisible until you look for it. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image: repeating-linear-gradient(
+    to bottom, transparent 0 calc(1.55rem - 1px), color-mix(in oklab, var(--line) 42%, transparent) calc(1.55rem - 1px) 1.55rem
+  );
+  opacity: 0.45;
+}
+
+body > * { position: relative; z-index: 1; }
+
+h1, h2, h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  line-height: 1.16;
+  margin: 0 0 0.4em;
+  text-wrap: balance;
+}
+
+h1 { font-size: clamp(2rem, 1.4rem + 2.2vw, 2.9rem); }
+h2 { font-size: 1.45rem; }
+h3 { font-size: 1.08rem; }
+
+p { margin: 0 0 0.9em; }
+a { color: inherit; }
+
+/* ---------- chrome ---------- */
+
+.masthead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gap);
+  padding: 1.1rem clamp(1rem, 5vw, 3rem);
+  border-bottom: 1px solid var(--line-strong);
+  background: var(--sheet);
+}
+
+.wordmark {
+  font-family: var(--font-display);
+  font-size: 1.32rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+
+.wordmark-sub {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 400;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.readonly-badge {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--state-accepted);
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 0.15rem 0.7rem;
+  cursor: help;
+}
+
+main { min-height: 60vh; }
+
+.page {
+  max-width: 74rem;
+  margin: 0 auto;
+  padding: clamp(1.5rem, 4vw, 3rem) clamp(1rem, 5vw, 3rem) 4rem;
+}
+
+.foot {
+  border-top: 1px solid var(--line);
+  padding: 1.6rem clamp(1rem, 5vw, 3rem);
+  color: var(--ink-faint);
+  font-size: 0.84rem;
+  max-width: 74rem;
+  margin: 0 auto;
+}
+
+.crumbs {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.05em;
+  color: var(--ink-faint);
+  margin-bottom: 1.5rem;
+}
+.crumbs a { text-decoration: none; border-bottom: 1px solid var(--line-strong); }
+.crumbs a:hover { color: var(--ink); }
+
+/* ---------- blocks ---------- */
+
+.intro, .review-head { margin-bottom: 2.5rem; }
+.lede { max-width: var(--measure-prose); font-size: 1.06rem; color: var(--ink-muted); }
+.muted { color: var(--ink-faint); }
+.empty { color: var(--ink-muted); font-style: italic; padding: 2rem 0; }
+
+.panel {
+  background: var(--sheet);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  padding: clamp(1.2rem, 3vw, 1.9rem);
+  margin-bottom: 2rem;
+}
+
+.panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--gap);
+  flex-wrap: wrap;
+}
+.panel-head p { max-width: var(--measure-prose); margin-bottom: 0; }
+
+/* Fixed 4-up rather than auto-fit: an auto-fit track count that lands on 3
+   leaves a fourth cell alone on its own row with the grid background showing
+   through beside it. */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  margin: 1.6rem 0;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.stats > div { background: var(--sheet); padding: 0.9rem 1.1rem; }
+.stats dt {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 0.35rem;
+}
+.stats dd { margin: 0; }
+
+.figure {
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.figure.accepted { color: var(--state-accepted); }
+.figure.muted { color: var(--ink-faint); }
+
+/* ---------- controls ---------- */
+
+button, .primary, .secondary {
+  font-family: var(--font-body);
+  font-size: 0.92rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 120ms, color 120ms, border-color 120ms;
+}
+
+.primary {
+  display: inline-block;
+  background: var(--ink);
+  color: var(--paper);
+  border: 1px solid var(--ink);
+  padding: 0.6rem 1.2rem;
+  text-decoration: none;
+  font-weight: 500;
+}
+.primary:hover { background: transparent; color: var(--ink); }
+
+.secondary {
+  display: inline-block;
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  padding: 0.6rem 1.2rem;
+  text-decoration: none;
+}
+.secondary:hover { border-color: var(--ink); }
+
+.ghost {
+  background: transparent;
+  color: var(--ink-muted);
+  border: 1px solid var(--line-strong);
+  padding: 0.5rem 0.95rem;
+}
+.ghost:hover { color: var(--ink); border-color: var(--ink); }
+
+.danger {
+  background: var(--severity-high);
+  color: var(--sheet);
+  border: 1px solid var(--severity-high);
+  padding: 0.5rem 0.95rem;
+}
+.danger:hover { filter: brightness(1.1); }
+
+.small { font-size: 0.82rem; padding: 0.4rem 0.8rem; }
+button:disabled { opacity: 0.55; cursor: progress; }
+
+.confirm { display: inline-flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; font-size: 0.86rem; }
+
+.ledger-list { list-style: none; padding: 0; margin: 0 0 1.4rem; }
+.ledger-list a {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--gap);
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--line);
+  text-decoration: none;
+  flex-wrap: wrap;
+}
+.ledger-list a:hover { background: color-mix(in oklab, var(--line) 25%, transparent); }
+
+/* ---------- findings ---------- */
+
+.findings { list-style: none; padding: 0; margin: 0 0 2.5rem; display: grid; gap: 1rem; }
+
+.finding {
+  background: var(--sheet);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  padding: 1.1rem 1.3rem;
+}
+.finding.sev-high { border-left-color: var(--severity-high); }
+.finding.sev-medium { border-left-color: var(--severity-medium); }
+.finding.sev-low { border-left-color: var(--severity-low); }
+.finding.is-rejected { opacity: 0.62; }
+.finding.is-accepted { border-left-color: var(--state-accepted); }
+
+.finding-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gap);
+  flex-wrap: wrap;
+}
+.finding-head > div { display: flex; align-items: baseline; gap: 0.7rem; flex-wrap: wrap; }
+.finding-head h3 { margin: 0; }
+
+/* Compounded with .sev on purpose. The card carries sev-high too, and a bare
+   .sev-high rule paints the whole finding in the wash colour. */
+.sev {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 0.14rem 0.5rem;
+  border-radius: 2px;
+}
+.sev.sev-high { background: var(--severity-high-bg); color: var(--severity-high); }
+.sev.sev-medium { background: var(--severity-medium-bg); color: var(--severity-medium); }
+.sev.sev-low { background: var(--severity-low-bg); color: var(--severity-low); }
+
+.stake {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 1.18rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--severity-high);
+}
+
+.explanation { max-width: var(--measure-prose); margin: 0.6rem 0 0.8rem; color: var(--ink-muted); }
+
+details > summary {
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  cursor: pointer;
+  padding: 0.3rem 0;
+  list-style-position: inside;
+}
+details > summary:hover { color: var(--ink); }
+
+.evidence {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.7rem 0;
+  font-size: 0.86rem;
+}
+.evidence th {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  font-weight: 400;
+  border-bottom: 1px solid var(--line-strong);
+  padding: 0.3rem 0.6rem 0.3rem 0;
+}
+.evidence td {
+  padding: 0.45rem 0.6rem 0.45rem 0;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.evidence .num { text-align: right; padding-right: 1.2rem; }
+.evidence .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+/* A wrapped date or amount is unreadable, and both are fixed-width by nature.
+   Only the supplier and reference columns are allowed to take the slack. */
+.evidence td:first-child, .evidence .num { white-space: nowrap; }
+.evidence .credit { color: var(--figure-credit); }
+
+.check {
+  max-width: var(--measure-prose);
+  font-size: 0.88rem;
+  color: var(--ink-muted);
+  background: color-mix(in oklab, var(--line) 22%, transparent);
+  border-left: 2px solid var(--line-strong);
+  padding: 0.7rem 0.9rem;
+  margin: 0.4rem 0 0;
+}
+
+.decide {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--line);
+}
+/* The note gets its own row so the two decision buttons always sit side by side.
+   A layout that sometimes wraps Dismiss below Confirm makes them look ranked. */
+.decide input {
+  flex: 1 1 100%;
+  font: inherit;
+  font-size: 0.88rem;
+  padding: 0.5rem 0.7rem;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+}
+.decide input:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+
+/*
+ * Confirm and Dismiss are the same weight on purpose.
+ *
+ * "Confirm" means the finding is real — bad news. "Dismiss" means it is fine —
+ * good news, and also means Countercheck was wrong. Making either one the filled
+ * primary button nudges the reviewer toward that answer, and the whole value of
+ * the product rests on that decision being honest. So neither is filled, and
+ * neither is red or green until it has been made.
+ */
+.decision {
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  color: var(--ink);
+  padding: 0.45rem 1rem;
+}
+.decision:hover { border-color: currentColor; }
+.decision-accept:hover { color: var(--state-accepted); }
+.decision-reject:hover { color: var(--state-rejected); }
+
+.decided-note {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin: 0.9rem 0 0;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+}
+
+.tag {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 0.14rem 0.5rem;
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--line) 50%, transparent);
+  color: var(--ink-faint);
+}
+.tag-accepted { background: var(--state-accepted-bg); color: var(--state-accepted); }
+.tag-rejected { background: var(--state-rejected-bg); color: var(--state-rejected); }
+.tag-deferred, .tag-created { background: var(--state-open-bg); color: var(--state-open); }
+
+/* ---------- upload and mapping ---------- */
+
+.upload-form { display: grid; gap: 1.1rem; justify-items: start; }
+
+.file-field { display: grid; gap: 0.45rem; }
+.field-label,
+.stats dt,
+.mapping th[scope="col"] {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.file-field input {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.7rem;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+  max-width: 34rem;
+}
+.file-field input:hover { border-color: var(--ink-muted); }
+
+.small-print { font-size: 0.82rem; margin: 0; }
+
+.form-error {
+  margin: 0;
+  color: var(--severity-high);
+  background: var(--severity-high-bg);
+  border-left: 2px solid var(--severity-high);
+  padding: 0.6rem 0.9rem;
+  font-size: 0.88rem;
+  max-width: var(--measure-prose);
+}
+
+.scroller { overflow-x: auto; }
+
+.mapping {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1.5rem;
+  /* Fixed so the field names and the selects hold a column each and the
+     reasoning takes the rest, instead of every column shrinking to fit the
+     longest sentence. */
+  table-layout: fixed;
+}
+.mapping col.c-field { width: 14rem; }
+.mapping col.c-pick { width: 15rem; }
+.mapping th[scope="col"] {
+  text-align: left;
+  font-weight: 400;
+  border-bottom: 1px solid var(--line-strong);
+  padding: 0.3rem 0.8rem 0.35rem 0;
+}
+.mapping td, .mapping th[scope="row"] {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.7rem 0.8rem 0.7rem 0;
+  border-bottom: 1px solid var(--line);
+  font-weight: 500;
+}
+.mapping tr.shaky td, .mapping tr.shaky th { background: color-mix(in oklab, var(--severity-medium-bg) 60%, transparent); }
+.field-note {
+  display: block;
+  font-weight: 400;
+  font-size: 0.78rem;
+  color: var(--ink-faint);
+  margin-top: 0.15rem;
+}
+.mapping select {
+  font: inherit;
+  font-size: 0.88rem;
+  padding: 0.4rem 0.5rem;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  width: 100%;
+  max-width: 14rem;
+}
+.reason { font-size: 0.84rem; }
+.confidence {
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  color: var(--state-accepted);
+  font-variant-numeric: tabular-nums;
+}
+.confidence.low { color: var(--severity-medium); }
+
+.date-order {
+  border: 1px solid var(--severity-medium);
+  background: var(--severity-medium-bg);
+  border-radius: var(--radius-sm);
+  padding: 1rem 1.2rem;
+  margin: 0 0 1.4rem;
+  display: grid;
+  gap: 0.45rem;
+  max-width: var(--measure-prose);
+}
+.date-order legend {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--severity-medium);
+  padding: 0 0.4rem;
+}
+.date-order p { font-size: 0.86rem; margin: 0 0 0.4rem; }
+.date-order label { display: flex; gap: 0.5rem; align-items: center; font-size: 0.9rem; }
+
+/* ---------- audit ---------- */
+
+.audit { list-style: none; padding: 0; margin: 0; font-size: 0.84rem; }
+.audit li {
+  display: grid;
+  grid-template-columns: 11rem 6.5rem 9rem 1fr;
+  gap: 0.8rem;
+  align-items: baseline;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.audit time { font-family: var(--font-mono); font-size: 0.76rem; color: var(--ink-faint); }
+.audit .tag { justify-self: start; }
+
+@media (max-width: 46rem) {
+  .audit li { grid-template-columns: 1fr; gap: 0.2rem; }
+  .stats { grid-template-columns: repeat(2, 1fr); }
+}
