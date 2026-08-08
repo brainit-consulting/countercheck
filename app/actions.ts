@@ -35,12 +35,27 @@ export async function resetDemoLedger() {
   return ledger;
 }
 
+/**
+ * A server action is a public HTTP endpoint, so its arguments are checked here
+ * rather than trusted because the UI only offers three buttons. An unvalidated
+ * decision string would be written straight into the ledger, and a value no
+ * screen counts makes a finding — and its money — vanish from every total.
+ *
+ * `decision: null` reopens.
+ */
 export async function decide(
   namespace: "demo" | "uploads", ledgerId: string, key: string,
-  decision: Decision, reason?: string,
+  decision: Decision | null, reason?: string,
 ) {
-  recordDecision(namespace, ledgerId, key, decision, currentUser(), reason);
+  if (namespace !== "demo" && namespace !== "uploads") throw new Error("unknown namespace");
+  if (decision !== null && decision !== "accepted" && decision !== "rejected") {
+    throw new Error("a finding is either accepted, rejected, or reopened");
+  }
+  const trimmed = typeof reason === "string" ? reason.slice(0, 500) : undefined;
+  const saved = recordDecision(namespace, ledgerId, key, decision, currentUser(), trimmed);
+  if (!saved) throw new Error("that finding is no longer in this ledger");
   revalidatePath(`/review/${namespace}/${ledgerId}`);
+  revalidatePath("/");
 }
 
 /* -------------------------------------------------------------------------- */

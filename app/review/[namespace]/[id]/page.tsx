@@ -1,9 +1,7 @@
 import {notFound} from "next/navigation";
-import {readLedger, totals, type Namespace} from "../../../../lib/store";
+import {ledgerCurrency, readLedger, totals, type Namespace} from "../../../../lib/store";
+import {money, mixed} from "../../../../lib/money";
 import {FindingCard} from "./finding-card";
-
-const gbp = (n: number) =>
-  new Intl.NumberFormat("en-GB", {style: "currency", currency: "GBP", maximumFractionDigits: 0}).format(n);
 
 export default async function Review({params}: {params: Promise<{namespace: string; id: string}>}) {
   const {namespace, id} = await params;
@@ -12,6 +10,9 @@ export default async function Review({params}: {params: Promise<{namespace: stri
   if (!ledger) notFound();
 
   const t = totals(ledger);
+  // A single sum across currencies is meaningless; saying so is the honest option.
+  const code = ledgerCurrency(ledger);
+  const gbp = (n: number) => (code ? money(n, code, {round: true}) : mixed(n));
   const invoiceById = new Map(ledger.invoices.map((i) => [i.id, i]));
   const open = ledger.findings.filter((f) => !f.decision);
   const closed = ledger.findings.filter((f) => f.decision);

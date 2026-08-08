@@ -18,7 +18,16 @@ const DATA_DIR = process.env.COUNTERCHECK_DATA ?? path.join(process.cwd(), ".dat
  * reach uploaded data. This is enforced by path, not by a conditional. */
 export type Namespace = "demo" | "uploads";
 
-export type Decision = "accepted" | "rejected" | "deferred";
+/**
+ * Two answers, and no third.
+ *
+ * There was briefly a "deferred" state, written by the Reopen button. Nothing
+ * counted it: `totals` sums open, accepted and rejected, so a deferred finding
+ * left the queue, left every total, and took its money with it. A state no
+ * screen can render is not a state, it is a leak — reopening now clears the
+ * decision and the finding returns to the queue it came from.
+ */
+export type Decision = "accepted" | "rejected";
 
 export type ReviewedFinding = Finding & {
   /** Stable across re-runs of detection: the rule plus the rows it matched. */
@@ -83,21 +92,34 @@ export function createLedger(ns: Namespace, name: string, invoices: Invoice[], f
   });
 }
 
+/** `decision: null` reopens: the finding goes back to the queue undecided. */
 export function recordDecision(
   ns: Namespace, ledgerId: string, key: string,
-  decision: Decision, who: string, reason?: string,
+  decision: Decision | null, who: string, reason?: string,
 ): Ledger | null {
   const ledger = readLedger(ns, ledgerId);
   if (!ledger) return null;
   const finding = ledger.findings.find((f) => f.key === key);
   if (!finding) return null;
-  finding.decision = decision;
-  finding.decidedBy = who;
-  finding.decidedAt = new Date().toISOString();
-  finding.reason = reason;
-  // Append-only: a corrected decision adds a line, it never edits the previous one.
+
+  const at = new Date().toISOString();
+  if (decision === null) {
+    delete finding.decision;
+    delete finding.decidedBy;
+    delete finding.decidedAt;
+    delete finding.reason;
+  } else {
+    finding.decision = decision;
+    finding.decidedBy = who;
+    finding.decidedAt = at;
+    finding.reason = reason;
+  }
+
+  // Append-only: a corrected decision adds a line, it never edits the previous
+  // one. Clearing the decision on the finding is not rewriting history — the
+  // history is here.
   ledger.audit.push({
-    at: finding.decidedAt, who, action: decision,
+    at, who, action: decision ?? "reopened",
     detail: `${finding.ruleId} — ${finding.explanation.slice(0, 90)}${reason ? ` (${reason})` : ""}`,
   });
   return saveLedger(ledger);
@@ -155,6 +177,22 @@ export function readPending(id: string): {name: string; text: string} | null {
 
 export function discardPending(id: string) {
   for (const ext of ["csv", "json"]) fs.rmSync(pendingPath(id, ext), {force: true});
+}
+
+/**
+ * The one currency this ledger is denominated in, or null if it holds more than
+ * one. Totals across currencies are meaningless, and a single sum stamped with a
+ * pound sign is worse than meaningless — so callers that get null must say so
+ * rather than pick a symbol.
+ */
+export function ledgerCurrency(ledger: Ledger): string | null {
+  let found: string | null = null;
+  for (const r of ledger.invoices) {
+    const c = (r.currency || "GBP").toUpperCase();
+    if (found === null) found = c;
+    else if (found !== c) return null;
+  }
+  return found ?? "GBP";
 }
 
 export function totals(ledger: Ledger) {

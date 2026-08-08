@@ -1,14 +1,24 @@
 import type {DetectionOptions, Finding, Invoice} from "../types";
 import {
-  daysBetween, isTransposition, looksLikeRegularSchedule,
+  daysBetween, isTransposition, onSchedule, scheduleCadence,
   normaliseInvoiceNumber, normaliseVendor, vendorSimilarity,
 } from "./match";
-
-const money = (n: number, currency = "GBP") =>
-  new Intl.NumberFormat("en-GB", {style: "currency", currency}).format(n);
+import {money} from "../../lib/money";
 
 const payables = (rows: Invoice[]) => rows.filter((r) => r.amount > 0);
 const credits = (rows: Invoice[]) => rows.filter((r) => r.amount < 0);
+
+/**
+ * Every rule that compares two amounts must first agree they are the same kind
+ * of money. €5,610.75 and £5,610.75 are not a duplicate, they are two invoices
+ * about £4,800 apart — and reporting them as one, formatted in a single
+ * currency, is precisely the sort of confident nonsense that ends a reader's
+ * trust in the whole queue.
+ *
+ * So currency is part of every grouping key, and the pairwise rules check it
+ * again where they compare rows the key did not already separate.
+ */
+const cur = (r: Invoice) => (r.currency || "GBP").toUpperCase();
 
 /** Group rows by a derived key. */
 function groupBy<T>(rows: T[], key: (r: T) => string): Map<string, T[]> {
@@ -32,7 +42,7 @@ function groupBy<T>(rows: T[], key: (r: T) => string): Map<string, T[]> {
 export function exactDuplicates(rows: Invoice[], o: DetectionOptions): Finding[] {
   const out: Finding[] = [];
   const groups = groupBy(payables(rows).filter((r) => r.amount >= o.minAmount), (r) =>
-    `${r.vendorName}|${r.amount}|${normaliseInvoiceNumber(r.invoiceNumber)}`);
+    `${r.vendorName}|${cur(r)}|${r.amount}|${normaliseInvoiceNumber(r.invoiceNumber)}`);
   for (const group of groups.values()) {
     if (group.length < 2) continue;
     const sorted = [...group].sort((a, b) => a.invoiceDate.localeCompare(b.invoiceDate));
@@ -56,12 +66,19 @@ export function exactDuplicates(rows: Invoice[], o: DetectionOptions): Finding[]
 export function rekeyedDuplicates(rows: Invoice[], o: DetectionOptions): Finding[] {
   const out: Finding[] = [];
   const groups = groupBy(payables(rows).filter((r) => r.amount >= o.minAmount), (r) =>
-    `${normaliseVendor(r.vendorName)}|${r.amount}`);
+    `${normaliseVendor(r.vendorName)}|${cur(r)}|${r.amount}`);
 
   for (const group of groups.values()) {
     if (group.length < 2) continue;
-    // A steady monthly cadence is a contract, not a duplicate. Skip the whole group.
-    if (looksLikeRegularSchedule(group.map((r) => r.invoiceDate))) continue;
+    // A steady cadence — weekly, fortnightly, monthly, quarterly — is a contract,
+    // not a duplicate.
+    //
+    // The cadence is applied per pair rather than by skipping the supplier
+    // outright. Skipping the group works for monthly billing only because a
+    // 30-day gap already exceeds the re-key window; on a weekly contract every
+    // adjacent pair is inside that window, so one genuine duplicate would
+    // unguard the entire year and report all fifty-two.
+    const cadence = scheduleCadence(group.map((r) => r.invoiceDate));
 
     const sorted = [...group].sort((a, b) => a.invoiceDate.localeCompare(b.invoiceDate));
     for (let i = 0; i < sorted.length - 1; i++) {
@@ -70,6 +87,7 @@ export function rekeyedDuplicates(rows: Invoice[], o: DetectionOptions): Finding
       if (normaliseInvoiceNumber(a.invoiceNumber) === normaliseInvoiceNumber(b.invoiceNumber)) continue;
       const gap = daysBetween(a.invoiceDate, b.invoiceDate);
       if (gap > o.rekeyWindowDays) continue;
+      if (cadence !== null && onSchedule(gap, cadence)) continue;
       out.push({
         ruleId: "rekeyed-duplicate",
         severity: "high",
@@ -86,7 +104,7 @@ export function rekeyedDuplicates(rows: Invoice[], o: DetectionOptions): Finding
 export function vendorSpellingDuplicates(rows: Invoice[], o: DetectionOptions): Finding[] {
   const out: Finding[] = [];
   const groups = groupBy(payables(rows).filter((r) => r.amount >= o.minAmount), (r) =>
-    `${normaliseInvoiceNumber(r.invoiceNumber)}|${r.amount}`);
+    `${normaliseInvoiceNumber(r.invoiceNumber)}|${cur(r)}|${r.amount}`);
 
   for (const group of groups.values()) {
     if (group.length < 2) continue;
@@ -127,6 +145,7 @@ export function amountTranspositions(rows: Invoice[], o: DetectionOptions): Find
         const a = sorted[i];
         const b = sorted[j];
         if (daysBetween(a.invoiceDate, b.invoiceDate) > o.rekeyWindowDays) break;
+        if (cur(a) !== cur(b)) continue;
         if (!isTransposition(a.amount, b.amount)) continue;
         out.push({
           ruleId: "amount-transposition",
@@ -155,6 +174,7 @@ export function unappliedCredits(rows: Invoice[], o: DetectionOptions): Finding[
       // Applied if any later payable is reduced by exactly this credit, or if a
       // later payable matches the credit's own amount (a straight offset).
       const applied = vendorPayables.some((p) =>
+        cur(p) === cur(credit) &&
         p.invoiceDate >= credit.invoiceDate && Math.abs(p.amount - value) < 0.005);
       if (applied) continue;
       out.push({
@@ -198,7 +218,7 @@ export function bankDetailChanges(rows: Invoice[], o: DetectionOptions): Finding
 /** Large, suspiciously round amounts that do not match how this supplier normally bills. */
 export function roundNumberOutliers(rows: Invoice[], o: DetectionOptions): Finding[] {
   const out: Finding[] = [];
-  const byVendor = groupBy(payables(rows), (r) => normaliseVendor(r.vendorName));
+  const byVendor = groupBy(payables(rows), (r) => `${normaliseVendor(r.vendorName)}|${cur(r)}`);
   for (const group of byVendor.values()) {
     if (group.length < 4) continue; // not enough history to call anything unusual
     const round = (n: number) => n >= o.roundNumberThreshold && Number.isInteger(n / 1000);

@@ -4,9 +4,7 @@ import {useState, useTransition} from "react";
 import type {Invoice, RuleId} from "../../../../src/types";
 import type {Decision, Namespace, ReviewedFinding} from "../../../../lib/store";
 import {decide} from "../../../actions";
-
-const gbp = (n: number) =>
-  new Intl.NumberFormat("en-GB", {style: "currency", currency: "GBP", minimumFractionDigits: 2}).format(n);
+import {money} from "../../../../lib/money";
 
 /**
  * A rule id is a fact about the engine; a reviewer needs a name and a next step.
@@ -57,7 +55,7 @@ export function FindingCard({
   const [pending, start] = useTransition();
   const rule = RULES[finding.ruleId];
 
-  const act = (decision: Decision) =>
+  const act = (decision: Decision | null) =>
     start(async () => {
       await decide(namespace, ledgerId, finding.key, decision, reason.trim() || undefined);
     });
@@ -69,7 +67,7 @@ export function FindingCard({
           <span className={`sev sev-${finding.severity}`}>{finding.severity}</span>
           <h3>{rule.label}</h3>
         </div>
-        <p className="stake" title="Money at risk if this finding is real">{gbp(finding.amountAtStake)}</p>
+        <p className="stake" title="Money at risk if this finding is real">{money(finding.amountAtStake, rows[0]?.currency)}</p>
       </div>
 
       <p className="explanation">{finding.explanation}</p>
@@ -93,7 +91,7 @@ export function FindingCard({
                 <td>{r.invoiceDate}</td>
                 <td>{r.vendorName}</td>
                 <td className="mono">{r.invoiceNumber}</td>
-                <td className={`num mono${r.amount < 0 ? " credit" : ""}`}>{gbp(r.amount)}</td>
+                <td className={`num mono${r.amount < 0 ? " credit" : ""}`}>{money(r.amount, r.currency)}</td>
                 <td className="mono">{r.bankLast4 ? `••${r.bankLast4}` : "—"}</td>
                 <td className="muted">{r.reference ?? "—"}</td>
               </tr>
@@ -110,7 +108,7 @@ export function FindingCard({
             by {finding.decidedBy} on {new Date(finding.decidedAt!).toLocaleDateString("en-GB")}
             {finding.reason ? ` — ${finding.reason}` : ""}
           </span>
-          <button className="ghost small" disabled={pending} onClick={() => act("deferred")}>
+          <button className="ghost small" disabled={pending} onClick={() => act(null)}>
             Reopen
           </button>
         </p>

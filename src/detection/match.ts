@@ -80,18 +80,55 @@ export function isTransposition(a: number, b: number): boolean {
 }
 
 /**
- * A vendor+amount pair that recurs on a steady monthly cadence is a subscription
- * or a contract, not a duplicate. This is the single most important guard in the
+ * A vendor+amount pair that recurs on a steady cadence is a subscription or a
+ * contract, not a duplicate. This is the single most important guard in the
  * engine: without it, every cleaning contract and software licence in the ledger
  * is reported as fraud and people stop reading the findings.
+ *
+ * The cadence is discovered, not assumed. An earlier version accepted only a
+ * monthly rhythm, which left every weekly, fortnightly and twice-monthly
+ * contract unguarded — and since the re-key rule fires on any gap up to
+ * `rekeyWindowDays` (21), that whole band was exactly where the false positives
+ * landed. One legitimate weekly retainer took the demo ledger from 6 findings to
+ * 57. The tests below pin all four rhythms.
+ *
+ * Tolerance scales with the cadence: a quarterly bill drifting nine days is
+ * still quarterly, while a weekly one drifting nine days is not weekly at all.
+ *
+ * A series with one genuine duplicate inside it fails this test, and that is
+ * correct — the odd gap is the finding, and the rule's own window then reports
+ * only the pair that is actually close together.
  */
-export function looksLikeRegularSchedule(dates: string[]): boolean {
-  if (dates.length < 3) return false;
+export function scheduleCadence(dates: string[]): number | null {
+  if (dates.length < 3) return null;
   const sorted = [...dates].sort();
   const gaps: number[] = [];
   for (let i = 1; i < sorted.length; i++) gaps.push(daysBetween(sorted[i - 1], sorted[i]));
-  // Monthly-ish, and consistent: every gap within a few days of the average.
-  const avg = gaps.reduce((s, g) => s + g, 0) / gaps.length;
-  if (avg < 25 || avg > 37) return false;
-  return gaps.every((g) => Math.abs(g - avg) <= 4);
+
+  // The median, not the mean: one irregular gap should not drag the yardstick
+  // it is about to be measured against.
+  const ordered = [...gaps].sort((a, b) => a - b);
+  const mid = Math.floor(ordered.length / 2);
+  const median = ordered.length % 2 ? ordered[mid] : (ordered[mid - 1] + ordered[mid]) / 2;
+
+  // Below this a repeat is not a rhythm. Nobody contracts to be billed the same
+  // amount every three days; that pattern is the thing we are looking for.
+  if (median < 5) return null;
+
+  // Most of the series has to keep the beat, not all of it. A year of monthly
+  // billing with one invoice entered twice is still monthly — and that one
+  // invoice is precisely what we want left exposed, which is why the caller
+  // tests each gap against the cadence rather than skipping the whole supplier.
+  const onBeat = gaps.filter((g) => Math.abs(g - median) <= cadenceTolerance(median)).length;
+  return onBeat / gaps.length >= 0.7 ? median : null;
 }
+
+/** A quarterly bill drifting nine days is still quarterly. A weekly one is not. */
+export const cadenceTolerance = (cadence: number) => Math.max(3, cadence * 0.15);
+
+/** Does this gap fall on the beat of a known cadence? */
+export const onSchedule = (gap: number, cadence: number) =>
+  Math.abs(gap - cadence) <= cadenceTolerance(cadence);
+
+export const looksLikeRegularSchedule = (dates: string[]): boolean =>
+  scheduleCadence(dates) !== null;
