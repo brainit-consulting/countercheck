@@ -96,6 +96,19 @@ a { color: inherit; }
   color: var(--ink-faint);
 }
 
+.masthead-tools { display: flex; align-items: center; gap: 0.7rem; }
+
+.foot kbd {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  background: var(--sheet);
+  border: 1px solid var(--line-strong);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  padding: 0.05rem 0.4rem;
+  color: var(--ink-muted);
+}
+
 .readonly-badge {
   margin: 0;
   font-family: var(--font-mono);
@@ -541,6 +554,329 @@ details > summary:hover { color: var(--ink); }
 }
 .date-order p { font-size: 0.86rem; margin: 0 0 0.4rem; }
 .date-order label { display: flex; gap: 0.5rem; align-items: center; font-size: 0.9rem; }
+
+/* ---------- the manual ----------
+ *
+ * A bound manual laid on the desk, not a modal. There is no backdrop and nothing
+ * behind it is disabled: it is meant to be dragged aside, shrunk, and left open
+ * while you work. It reopens where you left it.
+ */
+
+.help-trigger {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  line-height: 1;
+  width: 2rem;
+  height: 2rem;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: var(--ink-muted);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  flex: none;
+}
+.help-trigger:hover { color: var(--ink); border-color: var(--ink); }
+.help-trigger[aria-expanded="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+.cc-sr {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.manual {
+  position: fixed;
+  z-index: var(--z-overlay, 100);
+  display: flex;
+  flex-direction: column;
+  background: var(--sheet);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.08), 0 24px 70px -24px rgb(0 0 0 / 0.55);
+  overflow: hidden;
+}
+.manual:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+.manual-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap);
+  padding: 0.55rem 0.7rem 0.55rem 1.1rem;
+  border-bottom: 1px solid var(--line-strong);
+  background: var(--paper);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.manual-bar:active { cursor: grabbing; }
+
+.manual-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+}
+.manual-title-sub {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 400;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.manual-close {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--ink-faint);
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0.3rem 0.5rem;
+  border-radius: var(--radius-xs, 2px);
+}
+.manual-close:hover { color: var(--ink); border-color: var(--line-strong); }
+
+.manual-body { flex: 1; display: flex; min-height: 0; }
+
+.manual-contents {
+  flex: none;
+  width: 17rem;
+  border-right: 1px solid var(--line);
+  background: var(--paper);
+  overflow-y: auto;
+  padding: 1.1rem 0.6rem 1.5rem;
+}
+.manual-contents-head {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin: 0 0 0.5rem 0.7rem;
+}
+.manual-contents ol { list-style: none; margin: 0; padding: 0; }
+.manual-contents button {
+  display: flex;
+  gap: 0.7rem;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.7rem;
+  color: var(--ink-muted);
+  font-size: 0.86rem;
+}
+.manual-contents button:hover { background: var(--sheet); color: var(--ink); }
+.manual-contents button.is-current {
+  background: var(--sheet);
+  border-color: var(--line);
+  color: var(--ink);
+}
+.manual-num {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--ink-faint);
+  padding-top: 0.12rem;
+  font-variant-numeric: tabular-nums;
+}
+.manual-contents button.is-current .manual-num { color: var(--accent); }
+.manual-ch-title { display: block; font-weight: 500; }
+.manual-ch-blurb {
+  display: block;
+  font-size: 0.76rem;
+  color: var(--ink-faint);
+  margin-top: 0.1rem;
+}
+
+.manual-prose {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.6rem clamp(1.2rem, 4%, 3rem) 3rem;
+  min-width: 0;
+}
+/* The measure belongs to the running text, not to the page. A three-column table
+   held to 62ch wraps every cell to five lines and stops being a table. */
+.manual-prose article { max-width: 60rem; }
+.manual-prose > article > p,
+.manual-prose > article > h2,
+.manual-prose > article > h3,
+.manual-prose > article > ul,
+.manual-prose > article > ol,
+.manual-prose > article > .manual-note,
+.manual-prose > article > .manual-keys { max-width: 62ch; }
+
+.manual-running-head {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin: 0 0 0.5rem;
+}
+.manual-prose h2 {
+  font-size: 1.7rem;
+  margin: 0 0 0.9rem;
+  padding-bottom: 0.7rem;
+  border-bottom: 1px solid var(--line-strong);
+}
+.manual-prose h3 { font-size: 1.02rem; margin: 1.8rem 0 0.4rem; }
+.manual-prose p { color: var(--ink-muted); }
+.manual-prose ul, .manual-prose ol { color: var(--ink-muted); padding-left: 1.1rem; margin: 0 0 1rem; }
+.manual-prose li { margin-bottom: 0.5rem; }
+
+.manual-steps { list-style: none; padding-left: 0; counter-reset: step; }
+.manual-steps li {
+  counter-increment: step;
+  display: grid;
+  grid-template-columns: 1.9rem 1fr;
+  gap: 0.5rem;
+  margin-bottom: 0.7rem;
+}
+.manual-steps li::before {
+  content: counter(step, decimal-leading-zero);
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  color: var(--ink-faint);
+  padding-top: 0.12rem;
+}
+
+.manual-note {
+  border-left: 2px solid var(--accent);
+  background: var(--evidence-row-bg);
+  padding: 0.85rem 1rem;
+  margin: 1.2rem 0;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+.manual-note-title {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 0.35rem;
+}
+.manual-note p:last-child { margin-bottom: 0; font-size: 0.9rem; }
+
+.manual-scroller { overflow-x: auto; margin: 1rem 0 1.4rem; }
+.manual-table { border-collapse: collapse; font-size: 0.86rem; width: 100%; min-width: 34rem; }
+.manual-table th[scope="col"] {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 400;
+  color: var(--ink-faint);
+  border-bottom: 1px solid var(--line-strong);
+  padding: 0.3rem 1rem 0.35rem 0;
+  white-space: nowrap;
+}
+.manual-table th[scope="row"] {
+  text-align: left;
+  font-weight: 500;
+  color: var(--ink);
+  padding: 0.6rem 1rem 0.6rem 0;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+  min-width: 11rem;
+}
+.manual-table td {
+  color: var(--ink-muted);
+  padding: 0.6rem 1rem 0.6rem 0;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.manual-keys { margin: 0.8rem 0 1.4rem; }
+.manual-keys > div {
+  display: grid;
+  grid-template-columns: 12rem 1fr;
+  gap: 0.8rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--line);
+  align-items: baseline;
+}
+.manual-keys dt { margin: 0; }
+.manual-keys dd { margin: 0; color: var(--ink-muted); font-size: 0.88rem; }
+.manual-keys kbd {
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  background: var(--paper);
+  border: 1px solid var(--line-strong);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  padding: 0.1rem 0.45rem;
+  color: var(--ink);
+}
+
+.manual-turn {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--gap);
+  margin-top: 2.5rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--line-strong);
+}
+.manual-turn button {
+  display: grid;
+  gap: 0.15rem;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.7rem;
+  color: var(--ink);
+  font-size: 0.9rem;
+  max-width: 47%;
+}
+.manual-turn button:hover { border-color: var(--line-strong); }
+.manual-turn-next { text-align: right; justify-items: end; }
+.manual-turn-dir {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.manual-grip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 18px;
+  height: 18px;
+  cursor: nwse-resize;
+  touch-action: none;
+  background:
+    linear-gradient(135deg, transparent 0 46%, var(--line-strong) 46% 54%, transparent 54% 70%,
+      var(--line-strong) 70% 78%, transparent 78%);
+}
+
+/* Below this the two-column book cannot hold a readable measure, so the contents
+   become a strip across the top and the manual fills the screen. */
+@media (max-width: 52rem) {
+  .manual { left: 0 !important; top: 0 !important; width: 100% !important; height: 100% !important; }
+  .manual-body { flex-direction: column; }
+  .manual-contents {
+    width: auto;
+    max-height: 9rem;
+    border-right: none;
+    border-bottom: 1px solid var(--line-strong);
+  }
+  .manual-ch-blurb { display: none; }
+  .manual-grip { display: none; }
+}
 
 /* ---------- audit ---------- */
 

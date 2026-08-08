@@ -2,6 +2,7 @@ import type {Metadata} from "next";
 import {Fraunces, IBM_Plex_Sans, DM_Mono} from "next/font/google";
 import "./brand.css";
 import "./globals.css";
+import {HelpBook} from "./help/help-book";
 
 /* Self-hosted at build time — no runtime CDN, which matters for a tool people
  * will run against their own ledger. Fraunces is axis-locked sober in brand.css;
@@ -26,14 +27,18 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
             Countercheck
             <span className="wordmark-sub">spend integrity</span>
           </a>
-          <p className="readonly-badge" title="Countercheck cannot pay, void, or alter anything. It only reads what you give it.">
-            Read-only
-          </p>
+          <div className="masthead-tools">
+            <p className="readonly-badge" title="Countercheck cannot pay, void, or alter anything. It only reads what you give it.">
+              Read-only
+            </p>
+            <HelpBook />
+          </div>
         </header>
         <main>{children}</main>
         <footer className="foot">
           Countercheck reads an export and reports what looks wrong. Every finding is a
-          question for a person, not a decision.
+          question for a person, not a decision. Press{" "}
+          <kbd>?</kbd> for the manual.
         </footer>
       </body>
     </html>
