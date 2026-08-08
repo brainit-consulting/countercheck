@@ -17,8 +17,12 @@ import {money, mixed} from "../../../../lib/money";
  */
 export const dynamic = "force-dynamic";
 
-export default async function Ledger({params}: {params: Promise<{namespace: string; id: string}>}) {
+export default async function Ledger({params, searchParams}: {
+  params: Promise<{namespace: string; id: string}>;
+  searchParams: Promise<{supplier?: string}>;
+}) {
   const {namespace, id} = await params;
+  const {supplier} = await searchParams;
   if (namespace !== "demo" && namespace !== "uploads") notFound();
   const ledger = readLedger(namespace as Namespace, id);
   if (!ledger) notFound();
@@ -33,11 +37,19 @@ export default async function Ledger({params}: {params: Promise<{namespace: stri
     for (const rowId of f.invoiceIds) flagged.set(rowId, f.ruleId);
   }
 
-  const rows = [...ledger.invoices].sort((a, b) =>
+  /**
+   * One supplier at a time, when asked. A year of a contract is twelve rows
+   * scattered through a thousand, and the question "does this supplier bill me
+   * the same amount every month" is unanswerable until they sit together.
+   */
+  const all = [...ledger.invoices].sort((a, b) =>
     a.invoiceDate.localeCompare(b.invoiceDate) || a.vendorName.localeCompare(b.vendorName));
+  const rows = supplier
+    ? all.filter((r) => r.vendorName.toLowerCase().includes(supplier.toLowerCase()))
+    : all;
 
-  const suppliers = new Set(rows.map((r) => r.vendorName)).size;
-  const span = rows.length ? `${rows[0].invoiceDate} to ${rows[rows.length - 1].invoiceDate}` : "—";
+  const suppliers = new Set(all.map((r) => r.vendorName)).size;
+  const span = all.length ? `${all[0].invoiceDate} to ${all[all.length - 1].invoiceDate}` : "—";
 
   return (
     <div className="page">
@@ -55,8 +67,15 @@ export default async function Ledger({params}: {params: Promise<{namespace: stri
           here, it was not read, and the count at the top of the review queue says
           how many of those there were.
         </p>
+        {supplier ? (
+          <p className="filter-note">
+            Showing <strong>{rows.length}</strong> row{rows.length === 1 ? "" : "s"}{" "}
+            for suppliers matching &ldquo;{supplier}&rdquo;.{" "}
+            <a href={`/ledger/${namespace}/${ledger.id}`}>Show all {all.length.toLocaleString()}</a>
+          </p>
+        ) : null}
         <dl className="stats">
-          <div><dt>Rows</dt><dd className="figure">{rows.length.toLocaleString()}</dd></div>
+          <div><dt>{supplier ? "Shown" : "Rows"}</dt><dd className="figure">{rows.length.toLocaleString()}</dd></div>
           <div><dt>Suppliers</dt><dd className="figure">{suppliers}</dd></div>
           <div><dt>Flagged</dt><dd className="figure">{flagged.size}</dd></div>
           <div><dt>Period</dt><dd className="figure period">{span}</dd></div>

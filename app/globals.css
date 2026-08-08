@@ -569,6 +569,16 @@ details > summary:hover { color: var(--ink); }
 
 .spaced { margin-left: 0.6rem; }
 
+.filter-note {
+  font-size: 0.9rem;
+  color: var(--ink-muted);
+  background: var(--evidence-row-bg);
+  border-left: 2px solid var(--accent);
+  padding: 0.6rem 0.9rem;
+  margin: 0 0 1rem;
+  max-width: var(--measure-prose);
+}
+
 .small-note { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.04em; }
 .figure.period { font-size: 0.95rem; letter-spacing: 0; }
 
