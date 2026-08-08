@@ -67,7 +67,7 @@ namespace is a reset that can one day be pointed at the wrong one.
 npm test
 ```
 
-109 tests. The one to read first is the precision test in `test/engine.test.ts`,
+154 tests. The one to read first is the precision test in `test/engine.test.ts`,
 which asserts the demo ledger produces exactly the planted findings and nothing
 else. It was added after a demo run reported eleven findings for six problems —
 green tests said the rules worked; the report said they were unusable.
