@@ -54,7 +54,7 @@ export const CHAPTERS: Chapter[] = [
       {
         kind: "p",
         text:
-          "APQC puts duplicate and erroneous payments at 0.8 to 2 percent of disbursements. A company paying out ten million a year is therefore losing somewhere between eighty and two hundred thousand to paperwork. Recovery audit firms have built a $1.19 billion market on exactly this, and they will not talk to you unless you are large enough to justify an ERP integration project.",
+          "APQC's benchmarking puts duplicate and erroneous payments at 0.8 percent of the number of disbursements for top performers, and 2 percent for the worst. That is a count of payments, not a share of the money — on twenty thousand supplier payments a year it is 160 to 400 that were duplicated, sent to the wrong supplier, or sent for the wrong amount. What they are worth depends on which ones they were, and APQC's own caution is that a single one can run to tens of thousands.",
       },
       {
         kind: "p",
