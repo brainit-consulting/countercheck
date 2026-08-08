@@ -10,10 +10,11 @@ const credits = (rows: Invoice[]) => rows.filter((r) => r.amount < 0);
 
 /**
  * Every rule that compares two amounts must first agree they are the same kind
- * of money. €5,610.75 and £5,610.75 are not a duplicate, they are two invoices
- * about £4,800 apart — and reporting them as one, formatted in a single
- * currency, is precisely the sort of confident nonsense that ends a reader's
- * trust in the whole queue.
+ * of money. €5,610.75 and £5,610.75 are not a duplicate. They are two different
+ * sums, and how different depends on a rate this product does not know and has
+ * no business guessing — which is the whole reason they cannot be compared.
+ * Reporting them as one payment, formatted in a single currency, is exactly the
+ * sort of confident nonsense that ends a reader's trust in the queue.
  *
  * So currency is part of every grouping key, and the pairwise rules check it
  * again where they compare rows the key did not already separate.
