@@ -30,6 +30,13 @@ export default async function Review({params}: {params: Promise<{namespace: stri
           fired and shows the rows behind it, because every one of these is an
           accusation about someone&rsquo;s paperwork.
         </p>
+        <p className="muted">
+          Drawn from{" "}
+          <a href={`/ledger/${namespace}/${ledger.id}`}>
+            all {ledger.rowCount.toLocaleString()} rows
+          </a>
+          , which you can read in full.
+        </p>
         <dl className="stats">
           <div><dt>Open</dt><dd className="figure">{t.open}</dd></div>
           <div><dt>At stake</dt><dd className="figure">{gbp(t.openValue)}</dd></div>

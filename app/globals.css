@@ -555,6 +555,23 @@ details > summary:hover { color: var(--ink); }
 .date-order p { font-size: 0.86rem; margin: 0 0 0.4rem; }
 .date-order label { display: flex; gap: 0.5rem; align-items: center; font-size: 0.9rem; }
 
+/* ---------- the ledger ---------- */
+
+.ledger-table { font-size: 0.82rem; }
+.ledger-table th[scope="col"] { position: sticky; top: 0; background: var(--sheet); z-index: 1; }
+.ledger-table td { padding-top: 0.35rem; padding-bottom: 0.35rem; }
+
+/* A flagged row is marked, not accused. The tint says the queue has something to
+   say about this one; the finding says what, and only a person decides whether
+   it is right. */
+.ledger-table tr.is-flagged { background: color-mix(in oklab, var(--severity-medium-bg) 55%, transparent); }
+.ledger-table tr.is-flagged td:first-child { box-shadow: inset 3px 0 0 var(--severity-medium); }
+
+.spaced { margin-left: 0.6rem; }
+
+.small-note { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.04em; }
+.figure.period { font-size: 0.95rem; letter-spacing: 0; }
+
 /* ---------- the manual ----------
  *
  * A bound manual laid on the desk, not a modal. There is no backdrop and nothing

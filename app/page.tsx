@@ -66,6 +66,9 @@ export default async function Home() {
         <a className="primary" href={`/review/demo/${demo.id}`}>
           Review {t.open} finding{t.open === 1 ? "" : "s"}{" "}&rarr;
         </a>
+        <a className="secondary spaced" href={`/ledger/demo/${demo.id}`}>
+          Read all {demo.rowCount.toLocaleString()} rows &rarr;
+        </a>
       </section>
 
       <section className="panel">
