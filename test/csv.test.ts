@@ -50,6 +50,23 @@ describe("parsing", () => {
     expect(parseCsv('12" copper pipe,20.00')[0][0]).toBe('12" copper pipe');
   });
 
+  it("treats a quote after a closing one as data rather than opening a second field", () => {
+    // `"Bracket 12" x 4"` is an export that quoted a description and forgot to
+    // double the inch mark. Read as an opening quote, that last character hands
+    // every remaining line of the file to this one cell.
+    const records = parseCsvRecords('a,b\n"Bracket 12" x 4",second\nc,d');
+    expect(records).toHaveLength(3);
+    expect(records[1].cells).toEqual(['Bracket 12 x 4"', "second"]);
+    expect(records[2].cells).toEqual(["c", "d"]);
+  });
+
+  it("marks a record whose quote never closed with the line the quote opened on", () => {
+    const records = parseCsvRecords('h1,h2\na,"one\nb,c');
+    expect(records).toHaveLength(2);
+    expect(records[1].unterminatedQuote).toBe(2);
+    expect(records[0].unterminatedQuote).toBeUndefined();
+  });
+
   it("preserves a ragged row rather than padding it", () => {
     expect(parseCsv("a,b,c\nd,e")).toEqual([["a", "b", "c"], ["d", "e"]]);
   });
@@ -190,6 +207,39 @@ describe("column mapping", () => {
     expect(mapping.bankLast4.reason).toMatch(/no column in this header row resembles/);
   });
 
+  /**
+   * "Invoice Reference" reads a shade better as a reference than as an invoice
+   * number, and on a four-column export there is nothing else for either to take.
+   * Letting the optional field win refuses a file that had a perfectly good
+   * assignment, so the required field takes the column and reference does without.
+   */
+  it("takes a column back from an optional field when a required one has none", () => {
+    const mapping = suggestMapping(["Vendor", "Invoice Reference", "Doc Date", "Net"]);
+    expect(mapping.invoiceNumber.column).toBe(1);
+    expect(mapping.reference.column).toBeNull();
+    // And says so honestly: reference did not lose on the evidence, it lost on rank.
+    expect(mapping.reference.reason).toMatch(/invoiceNumber/);
+    expect(mapping.reference.reason).not.toMatch(/stronger match/);
+
+    const result = importCsv("Vendor,Invoice Reference,Doc Date,Net\nNorthgate,INV-1,2026-03-04,100.00");
+    expect(result.errors).toEqual([]);
+    expect(result.rows[0].invoiceNumber).toBe("INV-1");
+  });
+
+  it("leaves the displaced field to compete for what is left", () => {
+    const mapping = suggestMapping(["Vendor", "Invoice Reference", "Doc Date", "Net", "Payment Details"]);
+    expect(mapping.invoiceNumber.header).toBe("Invoice Reference");
+    expect(mapping.reference.header).toBe("Payment Details");
+  });
+
+  it("does not take a column from another required field", () => {
+    // Both invoiceNumber and invoiceDate want "Invoice No" here. That is a real
+    // conflict with no free answer, and the user has to settle it.
+    const mapping = suggestMapping(["Supplier Name", "Invoice No", "Net Amount"]);
+    expect(mapping.invoiceNumber.column).toBe(1);
+    expect(mapping.invoiceDate.column).toBeNull();
+  });
+
   it("reports a missing required column once, not once per row", () => {
     const result = importCsv("Supplier Name,Invoice No,Net Amount\nA,B,1.00\nC,D,2.00\nE,F,3.00");
     expect(result.rows).toEqual([]);
@@ -212,6 +262,13 @@ describe("dates", () => {
     ["4-Mar-26", undefined, "2026-03-04"],
     ["Mar 4, 2026", undefined, "2026-03-04"],
     ["March 4 2026", undefined, "2026-03-04"],
+    // Anything with a SQL database behind it stamps midnight onto every date.
+    ["2026-03-04 00:00:00", undefined, "2026-03-04"],
+    ["2026-03-04T00:00:00", undefined, "2026-03-04"],
+    ["2026-03-04T09:31:00.000Z", undefined, "2026-03-04"],
+    ["2026-03-04 09:31:00+01:00", undefined, "2026-03-04"],
+    ["04/03/2026 09:31", "dmy", "2026-03-04"],
+    ["4 Mar 2026 09:31", undefined, "2026-03-04"],
     // A day above twelve settles the order without any hint at all.
     ["25/12/2026", undefined, "2026-12-25"],
     ["12/25/2026", undefined, "2026-12-25"],
@@ -247,6 +304,14 @@ describe("dates", () => {
       expect(!result.ok && result.reason).toMatch(reason);
     });
   }
+
+  it("quotes the cell as the file has it, timestamp and all, when the date is not real", () => {
+    // The time is dropped to read the date; it is not dropped from the complaint,
+    // because the user has to find this cell in an editor.
+    const result = parseDate("2026-02-30 09:31");
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.reason).toContain("2026-02-30 09:31");
+  });
 });
 
 describe("amounts", () => {
@@ -287,21 +352,61 @@ describe("amounts", () => {
     });
   }
 
-  it("uses the rest of the column to settle 1.234", () => {
-    // On its own that could be 1234 or 1.234. A sibling written 1.234,56 answers it.
-    const alone = parseAmount("1.234");
-    expect(alone.ok && alone.value.value).toBe(1.234);
-    const informed = parseAmount("1.234", {decimalComma: true});
-    expect(informed.ok && informed.value.value).toBe(1234);
+  const value = (raw: string, opts?: {decimalComma?: boolean}) => {
+    const result = parseAmount(raw, opts);
+    return result.ok ? result.value.value : result.reason;
+  };
+
+  it("reads a lone separator with three digits behind it as a thousands group, comma or dot", () => {
+    // Whichever character is doing it, a three-digit fraction is not a currency
+    // amount. Reading 2.500 as two and a half imports a European ledger at a
+    // thousandth of its value and every rule downstream then runs on that.
+    expect(value("1,500")).toBe(1500);
+    expect(value("1.500")).toBe(1500);
+    expect(value("12.750")).toBe(12750);
+  });
+
+  it("lets the rest of the column turn that separator into a decimal", () => {
+    // "1,234" is 1234 in a British column and 1.234 in a German one, and only the
+    // other cells in the column can say which.
+    expect(value("1,234")).toBe(1234);
+    expect(value("1,234", {decimalComma: true})).toBe(1.234);
+    // In that same German column the dot is the thousands separator, not a decimal.
+    expect(value("1.234", {decimalComma: true})).toBe(1234);
   });
 
   it("applies the column's decimal convention across the import", () => {
     const result = importCsv(csv(
       'Northgate,HAR-50,2026-03-04,"1.234,56",EUR,PO-50,1234',
-      'Northgate,HAR-51,2026-03-05,"2.500",EUR,PO-51,1234',
+      'Northgate,HAR-51,2026-03-05,"99,95",EUR,PO-51,1234',
+      'Northgate,HAR-52,2026-03-06,"2.500",EUR,PO-52,1234',
+      'Northgate,HAR-53,2026-03-07,"2,500",EUR,PO-53,1234',
     ));
     expect(result.errors).toEqual([]);
-    expect(result.rows.map((r) => r.amount)).toEqual([1234.56, 2500]);
+    expect(result.rows.map((r) => r.amount)).toEqual([1234.56, 99.95, 2500, 2.5]);
+  });
+
+  it("imports a European column of whole thousands at its full value", () => {
+    const result = importCsv(csv(
+      "Northgate,HAR-1,2026-03-04,1.500,EUR,PO-1,1234",
+      "Northgate,HAR-2,2026-03-05,2.000,EUR,PO-2,1234",
+      "Northgate,HAR-3,2026-03-06,12.750,EUR,PO-3,1234",
+    ));
+    expect(result.errors).toEqual([]);
+    expect(result.rows.map((r) => r.amount)).toEqual([1500, 2000, 12750]);
+  });
+
+  it("does not flip a thousands-comma column on one hand-typed European figure", () => {
+    // "1,50" is the only cell here that votes at all, and one cell is not a column
+    // convention — reading the other three as European loses three thousand pounds.
+    const result = importCsv(csv(
+      'Northgate,HAR-1,2026-03-04,"1,50",GBP,PO-1,1234',
+      'Northgate,HAR-2,2026-03-05,"1,234",GBP,PO-2,1234',
+      'Northgate,HAR-3,2026-03-06,"2,500",GBP,PO-3,1234',
+      'Northgate,HAR-4,2026-03-07,"12,000",GBP,PO-4,1234',
+    ));
+    expect(result.errors).toEqual([]);
+    expect(result.rows.map((r) => r.amount)).toEqual([1.5, 1234, 2500, 12000]);
   });
 });
 
@@ -338,6 +443,90 @@ describe("messy exports", () => {
     const text = csv("Northgate,HAR-40,03/04/2026,100.00,GBP,PO-40,1234");
     expect(importCsv(text, {dateOrder: "dmy"}).rows[0].invoiceDate).toBe("2026-04-03");
     expect(importCsv(text, {dateOrder: "mdy"}).rows[0].invoiceDate).toBe("2026-03-04");
+  });
+
+  const twoConventions = csv(
+    "Northgate,HAR-40,03/04/2026,100.00,GBP,PO-40,1234",
+    "Northgate,HAR-41,25/12/2026,200.00,GBP,PO-41,1234",
+    "Northgate,HAR-42,05/06/2026,300.00,GBP,PO-42,1234",
+  );
+
+  it("refuses a file whose own dates contradict the order it was given", () => {
+    // 25/12 cannot be month-first, so a month-first import reads that row day-first
+    // and the other two month-first: one ledger, two conventions, no complaint.
+    const result = importCsv(twoConventions, {dateOrder: "mdy"});
+    expect(result.rows).toEqual([]);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]).toMatchObject({row: 3, column: "Invoice Date", value: "25/12/2026"});
+    expect(result.errors[0].reason).toMatch(/month-first/);
+  });
+
+  it("imports that file the moment the order matches what its dates say", () => {
+    const result = importCsv(twoConventions, {dateOrder: "dmy"});
+    expect(result.errors).toEqual([]);
+    expect(result.rows.map((r) => r.invoiceDate)).toEqual(["2026-04-03", "2026-12-25", "2026-06-05"]);
+  });
+
+  it("keeps every invoice when one description carries an inch mark", () => {
+    // The unescaped quote used to reopen the field and swallow the four rows after
+    // it — 1,400 of the 1,500 in this file, gone, with an empty error list.
+    const result = importCsv([
+      "Supplier,Invoice No,Invoice Date,Amount,Description",
+      'Northgate Facilities,HAR-1,2026-03-04,100.00,"Bracket 12" x 4"',
+      "Harlow Print,HAR-2,2026-03-05,200.00,Letterheads",
+      "Kestrel Logistics,HAR-3,2026-03-06,300.00,Pallet delivery",
+      "Ashworth Legal,HAR-4,2026-03-07,400.00,Retainer",
+      "Pinefield Catering,HAR-5,2026-03-08,500.00,Board lunch",
+    ].join("\n"));
+    expect(result.errors).toEqual([]);
+    expect(result.rows.map((r) => r.invoiceNumber)).toEqual(["HAR-1", "HAR-2", "HAR-3", "HAR-4", "HAR-5"]);
+    expect(result.rows.reduce((total, r) => total + r.amount, 0)).toBe(1500);
+  });
+
+  it("reports a quote that never closes instead of importing the row it damaged", () => {
+    // The quote opens in HAR-1's bank column, so the next two invoices are read as
+    // part of that one cell. Importing HAR-1 anyway gives it Kestrel's bank digits.
+    const result = importCsv(csv(
+      'Northgate,HAR-1,2026-03-04,100.00,GBP,PO-1,"1234',
+      "Harlow Print,HAR-2,2026-03-05,200.00,GBP,PO-2,8842",
+      "Kestrel Logistics,HAR-3,2026-03-06,300.00,GBP,PO-3,9911",
+    ));
+    expect(result.rows).toEqual([]);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0].row).toBe(2);
+    expect(result.errors[0].reason).toMatch(/never closed/);
+    expect(result.errors[0].reason).toMatch(/2 lines after it/);
+  });
+
+  it("blames the quote, not the header row, when the quote opens in the header", () => {
+    const result = importCsv('Supplier Name,"Invoice No,Invoice Date,Net Amount\nNorthgate,HAR-1,2026-03-04,100.00');
+    expect(result.rows).toEqual([]);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0].reason).toMatch(/never closed/);
+    expect(result.errors[0].reason).not.toMatch(/resembles/);
+  });
+
+  it("names the encoding when the file is not UTF-8, rather than blaming the header row", () => {
+    // Excel's "Unicode Text" save is UTF-16. Decoded as UTF-8 it opens with two
+    // replacement characters and pads every letter with a NUL, so all four required
+    // columns come back unrecognisable and no amount of remapping will help.
+    const utf16 = "\ufffd\ufffdS\u0000u\u0000p\u0000p\u0000l\u0000i\u0000e\u0000r\u0000";
+    const result = importCsv(utf16);
+    expect(result.rows).toEqual([]);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0].reason).toMatch(/UTF-16/);
+    expect(result.errors[0].reason).toMatch(/UTF-8/);
+  });
+
+  it("refuses a supplier name the decoder mangled rather than importing it", () => {
+    // A Latin-1 export leaves U+FFFD where the accent was. "Café Fresnel" arriving
+    // as "Caf<?> Fresnel" is a different supplier to every rule that compares
+    // names, and the finished report gives no hint that it happened.
+    const result = importCsv(csv("Caf\ufffd Fresnel,HAR-1,2026-03-04,100.00,GBP,PO-1,1234"));
+    expect(result.rows).toEqual([]);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0].row).toBe(2);
+    expect(result.errors[0].reason).toMatch(/not UTF-8/);
   });
 
   it("reports every problem in a row at once", () => {

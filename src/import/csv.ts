@@ -80,6 +80,13 @@ export type CsvRecord = {
    * find in their editor is an error they will not fix.
    */
   line: number;
+  /**
+   * The line an unclosed quote opened on, when this record has one. It can only be
+   * the last record, because by then the quote has eaten the rest of the file. The
+   * record is handed back marked rather than quietly finalised: a caller that
+   * cannot see the damage cannot report it, and the lines inside it are invoices.
+   */
+  unterminatedQuote?: number;
 };
 
 /**
@@ -95,15 +102,19 @@ export function parseCsvRecords(text: string): CsvRecord[] {
   const records: CsvRecord[] = [];
   let cells: string[] = [];
   let field = "";
+  /** Spaces seen after a closing quote, held until we know whether data follows. */
+  let pad = "";
   let inQuotes = false;
   let fieldQuoted = false;
   let recordQuoted = false;
   let line = 1;
   let recordLine = 1;
+  let quoteLine = 1;
 
   const endField = () => {
     cells.push(fieldQuoted ? field : field.trim());
     field = "";
+    pad = "";
     fieldQuoted = false;
   };
   const endRecord = () => {
@@ -130,28 +141,35 @@ export function parseCsvRecords(text: string): CsvRecord[] {
       field += c; i++; continue;
     }
 
-    if (c === '"') {
-      // A quote only opens a quoted field at the start of one. Mid-field it is
-      // data: `12" copper pipe` is a description, not a broken export.
-      if (!fieldQuoted && field.trim() === "") {
-        field = ""; inQuotes = true; fieldQuoted = true; recordQuoted = true; i++; continue;
-      }
-      if (fieldQuoted) { inQuotes = true; i++; continue; }
-      field += c; i++; continue;
+    // A quote only opens a quoted field at the start of one. Anywhere else it is
+    // data: `12" copper pipe` is a description, and `"Bracket 12" x 4"` is an
+    // export that quoted a description and forgot to double the inch mark. Reading
+    // that last quote as an opening one hands every following line to this cell,
+    // and the invoices in them are gone with nothing to say they existed.
+    if (c === '"' && !fieldQuoted && field.trim() === "") {
+      field = ""; inQuotes = true; fieldQuoted = true; recordQuoted = true; quoteLine = line;
+      i++; continue;
     }
 
-    // Padding after a closing quote belongs to nobody.
-    if (fieldQuoted && (c === " " || c === "\t")) { i++; continue; }
+    // Padding after a closing quote belongs to nobody — unless data follows it, in
+    // which case the field did not end there and the spaces are part of the value.
+    if (fieldQuoted && (c === " " || c === "\t")) { pad += c; i++; continue; }
 
     if (c === ",") { endField(); i++; continue; }
     if (c === "\r") { i += src[i + 1] === "\n" ? 2 : 1; line++; endRecord(); continue; }
     if (c === "\n") { i++; line++; endRecord(); continue; }
 
-    field += c; i++;
+    field += pad + c;
+    pad = "";
+    i++;
   }
 
   // A file that does not end in a newline still has a last record.
   if (field.length || cells.length || fieldQuoted) endRecord();
+  // A quote still open at the end of the file has already swallowed everything
+  // after it. Marking the record is what lets the import say which line went wrong
+  // and how much went with it, instead of returning one fat row and no complaint.
+  if (inQuotes && records.length) records[records.length - 1].unterminatedQuote = quoteLine;
   return records;
 }
 
@@ -332,6 +350,10 @@ function resolveOverride(headers: string[], want: string | number): number | nul
  * so two fields cannot claim the same column and the strongest evidence in the
  * file wins first. Ties break on column order then field order, because a
  * mapping that changes between runs of the same file is not a mapping.
+ *
+ * Greed alone is not quite enough, though: score order takes no account of which
+ * fields an import cannot run without, so a required field left with nothing
+ * reclaims its column from an optional one afterwards.
  */
 export function suggestMapping(
   headers: string[],
@@ -362,45 +384,84 @@ export function suggestMapping(
     };
   }
 
-  const candidates: {field: Field; column: number; score: number; why: string}[] = [];
-  FIELDS.forEach((field, fi) => {
-    if (settled.has(field)) return;
-    headers.forEach((_, ci) => {
-      const s = scores[fi][ci];
-      if (s.score >= CLAIM_THRESHOLD && !takenColumn.has(ci)) {
-        candidates.push({field, column: ci, score: s.score, why: s.why});
-      }
-    });
-  });
-  candidates.sort((a, b) =>
-    b.score - a.score || a.column - b.column || FIELDS.indexOf(a.field) - FIELDS.indexOf(b.field));
-
-  for (const c of candidates) {
-    if (settled.has(c.field) || takenColumn.has(c.column)) continue;
-    settled.add(c.field);
-    takenColumn.set(c.column, c.field);
+  const take = (field: Field, column: number, score: number, why: string, note = "") => {
+    settled.add(field);
+    takenColumn.set(column, field);
 
     // The runner-up is reported even when another field has already claimed it:
     // the user is being told what else this column could have been.
-    const fi = FIELDS.indexOf(c.field);
+    const fi = FIELDS.indexOf(field);
     let runnerUp = {column: -1, score: 0};
     headers.forEach((_, ci) => {
-      if (ci === c.column) return;
+      if (ci === column) return;
       if (scores[fi][ci].score > runnerUp.score) runnerUp = {column: ci, score: scores[fi][ci].score};
     });
 
-    const close = runnerUp.column >= 0 && c.score - runnerUp.score < CLOSE_CALL;
-    const confidence = close ? c.score - (CLOSE_CALL - (c.score - runnerUp.score)) : c.score;
-    const note = close
+    const close = runnerUp.column >= 0 && score - runnerUp.score < CLOSE_CALL;
+    const confidence = close ? score - (CLOSE_CALL - (score - runnerUp.score)) : score;
+    const closeCall = close
       ? `; "${headers[runnerUp.column]}" scored almost as well (${runnerUp.score.toFixed(2)}) and may be the right column instead`
       : "";
-    mapping[c.field] = {
-      column: c.column,
-      header: headers[c.column],
+    mapping[field] = {
+      column,
+      header: headers[column],
       confidence: Math.max(0, Math.round(confidence * 100) / 100),
-      reason: c.why + note,
+      reason: why + closeCall + note,
     };
+  };
+
+  /** One round of bidding: every field still without a column, over every column still free. */
+  const compete = () => {
+    const candidates: {field: Field; column: number; score: number; why: string}[] = [];
+    FIELDS.forEach((field, fi) => {
+      if (settled.has(field)) return;
+      headers.forEach((_, ci) => {
+        const s = scores[fi][ci];
+        if (s.score >= CLAIM_THRESHOLD && !takenColumn.has(ci)) {
+          candidates.push({field, column: ci, score: s.score, why: s.why});
+        }
+      });
+    });
+    candidates.sort((a, b) =>
+      b.score - a.score || a.column - b.column || FIELDS.indexOf(a.field) - FIELDS.indexOf(b.field));
+
+    for (const c of candidates) {
+      if (settled.has(c.field) || takenColumn.has(c.column)) continue;
+      take(c.field, c.column, c.score, c.why);
+    }
+  };
+
+  compete();
+
+  // A required field with no column stops the import dead, while reference,
+  // currency and bankLast4 are decoration. So an optional field holding the only
+  // column a required one could have used gives it back — "Invoice Reference"
+  // reads a shade better as a reference than as an invoice number, and losing a
+  // whole export to that margin helps nobody — and then bids again for whatever
+  // is left. Nothing is ever taken from another required field: two required
+  // fields wanting one column is a genuine conflict, and the user settles it.
+  const displaced = {} as Partial<Record<Field, {to: Field; column: number}>>;
+  for (const field of REQUIRED) {
+    if (settled.has(field)) continue;
+    const fi = FIELDS.indexOf(field);
+    let best = {column: -1, score: 0};
+    headers.forEach((_, ci) => {
+      const holder = takenColumn.get(ci);
+      if (holder === undefined || REQUIRED.includes(holder)) return;
+      if (scores[fi][ci].score >= CLAIM_THRESHOLD && scores[fi][ci].score > best.score) {
+        best = {column: ci, score: scores[fi][ci].score};
+      }
+    });
+    if (best.column < 0) continue;
+
+    const holder = takenColumn.get(best.column) as Field;
+    displaced[holder] = {to: field, column: best.column};
+    settled.delete(holder);
+    takenColumn.delete(best.column);
+    take(field, best.column, best.score, scores[fi][best.column].why,
+      `; ${holder} matched this column more closely, but ${holder} is optional and an import with no ${field} cannot run at all`);
   }
+  if (Object.keys(displaced).length) compete();
 
   for (const field of FIELDS) {
     if (settled.has(field)) continue;
@@ -409,15 +470,20 @@ export function suggestMapping(
     headers.forEach((_, ci) => {
       if (scores[fi][ci].score > nearest.score) nearest = {column: ci, score: scores[fi][ci].score};
     });
-    // Three different ways to end up unmapped, and telling them apart is the
+    // Four different ways to end up unmapped, and telling them apart is the
     // difference between a user fixing their export and a user distrusting the
     // tool: nothing resembled the field, something resembled it but not enough,
-    // or something resembled it and a better-evidenced field took the column
-    // first. Reporting the third as "below the threshold" would be a lie, and a
-    // wrong explanation is worse than none.
+    // something resembled it and a better-evidenced field took the column first,
+    // or this field had the best evidence and lost the column anyway because a
+    // required field had nowhere else to go. Reporting that last one as a
+    // stronger match elsewhere would be a lie the user can check by looking at
+    // the scores, and a wrong explanation is worse than none.
     const takenBy = nearest.column >= 0 ? takenColumn.get(nearest.column) : undefined;
+    const lost = displaced[field];
     let reason: string;
-    if (nearest.column < 0) {
+    if (lost) {
+      reason = `${field} has no column of its own: "${headers[lost.column]}" was the best evidence for it, but ${lost.to} is required and had no other candidate, so the column went there`;
+    } else if (nearest.column < 0) {
       reason = `no column in this header row resembles ${field}`;
     } else if (takenBy && nearest.score >= CLAIM_THRESHOLD) {
       reason = `${field} has no column of its own: "${headers[nearest.column]}" scored ${nearest.score.toFixed(2)} for it, but is a stronger match for ${takenBy}`;
@@ -460,6 +526,14 @@ function buildDate(y: number, m: number, d: number, shown: string): Coerced<stri
 }
 
 /**
+ * The time an export stamped onto a date, which an invoice date does not need.
+ * Anything with a SQL database behind it writes midnight on every row, and a file
+ * whose every date carries 00:00:00 would otherwise import nothing at all.
+ */
+const TIME_TAIL = /[T ]\d{1,2}:\d{2}(:\d{2})?(\.\d+)?\s*(Z|[+-]\d{2}:?\d{2})?$/i;
+const withoutTime = (s: string) => s.replace(TIME_TAIL, "").trim();
+
+/**
  * Text to an ISO date, or a reason why not.
  *
  * The only case that needs a hint is a pure-numeric date where both leading
@@ -468,29 +542,33 @@ function buildDate(y: number, m: number, d: number, shown: string): Coerced<stri
  * consulted last, only where the file genuinely cannot say.
  */
 export function parseDate(raw: string, dateOrder?: DateOrder): Coerced<string> {
-  const s = raw.trim();
-  if (!s) return {ok: false, reason: "the date is blank"};
+  // Every complaint quotes the cell as the file has it, timestamp included: the
+  // user has to find this value in an editor, and one they cannot search for is
+  // not a citation.
+  const shown = raw.trim();
+  if (!shown) return {ok: false, reason: "the date is blank"};
+  const s = withoutTime(shown);
 
   // Year first is unambiguous whatever locale wrote the file.
   let m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
-  if (m) return buildDate(+m[1], +m[2], +m[3], s);
+  if (m) return buildDate(+m[1], +m[2], +m[3], shown);
 
   m = s.match(/^(\d{4})(\d{2})(\d{2})$/);
-  if (m && +m[1] >= 1900 && +m[1] <= 2100) return buildDate(+m[1], +m[2], +m[3], s);
+  if (m && +m[1] >= 1900 && +m[1] <= 2100) return buildDate(+m[1], +m[2], +m[3], shown);
 
   // A month name settles the order by itself, which is why exports that use one
   // are the easy case however ugly the punctuation around it.
   m = s.match(/^(\d{1,2})[\s\-/.]*([A-Za-z]{3,9})\.?[\s\-/.,]*(\d{2}|\d{4})$/);
   if (m) {
     const month = MONTHS[m[2].toLowerCase()];
-    if (!month) return {ok: false, reason: `"${s}" does not name a month I recognise ("${m[2]}")`};
-    return buildDate(expandYear(+m[3]), month, +m[1], s);
+    if (!month) return {ok: false, reason: `"${shown}" does not name a month I recognise ("${m[2]}")`};
+    return buildDate(expandYear(+m[3]), month, +m[1], shown);
   }
   m = s.match(/^([A-Za-z]{3,9})\.?[\s\-/.]*(\d{1,2})[\s\-/.,]*(\d{2}|\d{4})$/);
   if (m) {
     const month = MONTHS[m[1].toLowerCase()];
-    if (!month) return {ok: false, reason: `"${s}" does not name a month I recognise ("${m[1]}")`};
-    return buildDate(expandYear(+m[3]), month, +m[2], s);
+    if (!month) return {ok: false, reason: `"${shown}" does not name a month I recognise ("${m[1]}")`};
+    return buildDate(expandYear(+m[3]), month, +m[2], shown);
   }
 
   m = s.match(/^(\d{1,2})[-/. ](\d{1,2})[-/. ](\d{2}|\d{4})$/);
@@ -498,20 +576,35 @@ export function parseDate(raw: string, dateOrder?: DateOrder): Coerced<string> {
     const a = +m[1];
     const b = +m[2];
     const y = expandYear(+m[3]);
-    if (a > 12 && b > 12) return {ok: false, reason: `"${s}" has no valid month: neither ${a} nor ${b} can be one`};
-    if (a > 12) return buildDate(y, b, a, s);
-    if (b > 12) return buildDate(y, a, b, s);
+    if (a > 12 && b > 12) return {ok: false, reason: `"${shown}" has no valid month: neither ${a} nor ${b} can be one`};
+    if (a > 12) return buildDate(y, b, a, shown);
+    if (b > 12) return buildDate(y, a, b, shown);
     // 03/03 reads the same both ways, so it is not ambiguous and must not be reported.
-    if (a === b) return buildDate(y, a, b, s);
-    if (dateOrder === "dmy") return buildDate(y, b, a, s);
-    if (dateOrder === "mdy") return buildDate(y, a, b, s);
+    if (a === b) return buildDate(y, a, b, shown);
+    if (dateOrder === "dmy") return buildDate(y, b, a, shown);
+    if (dateOrder === "mdy") return buildDate(y, a, b, shown);
     return {
       ok: false,
-      reason: `"${s}" is ambiguous: ${a} ${MONTH_NAMES[b - 1]} ${y} if the file is day-first, ${b} ${MONTH_NAMES[a - 1]} ${y} if it is month-first — set dateOrder to "dmy" or "mdy"`,
+      reason: `"${shown}" is ambiguous: ${a} ${MONTH_NAMES[b - 1]} ${y} if the file is day-first, ${b} ${MONTH_NAMES[a - 1]} ${y} if it is month-first — set dateOrder to "dmy" or "mdy"`,
     };
   }
 
-  return {ok: false, reason: `"${s}" is not a date format this importer recognises`};
+  return {ok: false, reason: `"${shown}" is not a date format this importer recognises`};
+}
+
+/**
+ * The order a date states for itself, or null where both readings stand. 25/12 can
+ * only be day-first, and a column holding one has answered the question whatever
+ * the upload form was set to — which is also how a file contradicts an answer.
+ */
+function forcedOrder(raw: string): DateOrder | null {
+  const m = withoutTime(raw.trim()).match(/^(\d{1,2})[-/. ](\d{1,2})[-/. ](\d{2}|\d{4})$/);
+  if (!m) return null;
+  const a = +m[1];
+  const b = +m[2];
+  if (a > 12 && b <= 12) return "dmy";
+  if (b > 12 && a <= 12) return "mdy";
+  return null;
 }
 
 const CURRENCY_SYMBOLS: Record<string, string> = {
@@ -527,6 +620,11 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
  * "1.234,56" three rows down answers it. Only unambiguous cells vote, and any
  * dot-decimal evidence at all vetoes the conclusion — a column that mixes both
  * conventions gets no hint and falls back to per-cell rules.
+ *
+ * It also takes two votes. One cell is as likely to be a hand-typed European
+ * figure in a column of thousands commas, and turning the column on that reads
+ * "12,000" as twelve — three orders of magnitude, on every row below it, with
+ * nothing on the screen to say it happened.
  */
 export function sniffDecimalComma(cells: string[]): boolean {
   let comma = 0;
@@ -541,7 +639,7 @@ export function sniffDecimalComma(cells: string[]): boolean {
     if (/,\d{1,2}$/.test(s)) comma++;
     else if (/\.\d{1,2}$/.test(s)) dot++;
   }
-  return comma > 0 && dot === 0;
+  return comma > 1 && dot === 0;
 }
 
 /**
@@ -603,7 +701,13 @@ export function parseAmount(
   } else if (lastDot >= 0) {
     const only = s.indexOf(".") === lastDot;
     const after = s.length - lastDot - 1;
-    decimalAt = !only ? -1 : after === 3 && opts.decimalComma ? -1 : lastDot;
+    // The same rule as the comma above, for the same reason. "2.500" is two and a
+    // half thousand across most of Europe and two and a half nowhere that writes
+    // invoices, and a ledger read the second way arrives at a thousandth of its
+    // value with every rule downstream running on it. The comma has a way back —
+    // a column that proves itself comma-decimal — and the dot has none, because
+    // comma-decimal is the only convention the column sniff can report.
+    decimalAt = !only ? -1 : after === 3 ? -1 : lastDot;
   }
 
   const whole = (decimalAt >= 0 ? s.slice(0, decimalAt) : s).replace(/[.,]/g, "");
@@ -631,7 +735,66 @@ function coerceCurrency(raw: string): Coerced<string | undefined> {
 
 const truncate = (s: string, n = 80) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
+/**
+ * What the decoded text says about the encoding the file was actually saved in.
+ *
+ * An upload is decoded as UTF-8, so a file saved as anything else arrives already
+ * damaged. UTF-16 — Excel's "Unicode Text", and the default from several ERPs —
+ * pads every letter with a NUL and no header row survives it, so the import
+ * complains about column names when the column names were never the problem.
+ * Latin-1 is the worse case because it succeeds: "Café Fresnel" comes through as
+ * "Caf<?> Fresnel", which is a different supplier to every rule that compares
+ * names, and the finished report gives no sign of it. Neither is repairable from
+ * here and both have the same one-line fix at the other end.
+ */
+function encodingFault(text: string): ImportError | null {
+  const nul = text.indexOf("\u0000");
+  const lost = text.indexOf("\ufffd");
+  if (nul < 0 && lost < 0) return null;
+
+  const at = nul < 0 ? lost : lost < 0 ? nul : Math.min(nul, lost);
+  const line = text.slice(0, at).split(/\r\n|\r|\n/).length;
+  const from = Math.max(text.lastIndexOf("\n", at), text.lastIndexOf("\r", at)) + 1;
+  return {
+    row: line,
+    column: "(file)",
+    // Shown with the unreadable characters marked, because they have no glyph and
+    // a line the user cannot see is a line they cannot check.
+    value: truncate(text.slice(from, from + 200).replace(/[\u0000\ufffd]/g, "?")),
+    reason: nul >= 0
+      ? "this file is not UTF-8: every letter is padded with a NUL byte, which is what UTF-16 looks like read as UTF-8 — Excel writes it when you save as \"Unicode Text\". Export it again as CSV UTF-8 and the column names will come back."
+      : `this file is not UTF-8: line ${line} has a byte the decoder could not read, so a character is missing and any supplier name around it is no longer the name your system holds. Export it again as CSV UTF-8.`,
+  };
+}
+
+/**
+ * A quote that never closed has already eaten everything after it, so the lines
+ * inside it are not records and cannot be reported one at a time. Naming the line
+ * the quote opened on and how many lines went with it is the only account of them
+ * the user can reconcile against their own system.
+ */
+function unterminatedQuoteError(rec: CsvRecord): ImportError {
+  const open = rec.unterminatedQuote as number;
+  // The unclosed field is always the last one, so its newlines are exactly the
+  // lines that were swallowed.
+  const swallowed = (rec.cells[rec.cells.length - 1] ?? "").split("\n").length - 1;
+  const what = swallowed
+    ? `so the ${swallowed} lines after it were read as part of this row rather than as invoices`
+    : "so the rest of the file was read as part of this row";
+  return {
+    row: open,
+    column: "(row)",
+    value: truncate(rec.cells.join(",")),
+    reason: `a quoted value opened on line ${open} and never closed, ${what}. Close the quote or take it out, and import again.`,
+  };
+}
+
 export function importCsv(text: string, options: ImportOptions = {}): ImportResult {
+  const encoding = encodingFault(text);
+  if (encoding) {
+    return {rows: [], mapping: suggestMapping([]), unmapped: [], errors: [encoding]};
+  }
+
   const records = parseCsvRecords(text);
   if (!records.length) {
     return {
@@ -643,6 +806,12 @@ export function importCsv(text: string, options: ImportOptions = {}): ImportResu
   }
 
   const header = records[0];
+  // A quote that opened in the header row took the whole file with it, and there
+  // is no header left to map. Saying so beats four complaints about columns that
+  // are sitting there in the file, unreadable through no fault of their names.
+  if (header.unterminatedQuote !== undefined) {
+    return {rows: [], mapping: suggestMapping([]), unmapped: [], errors: [unterminatedQuoteError(header)]};
+  }
   const headers = header.cells;
   const mapping = suggestMapping(headers, options.mapping);
   const errors: ImportError[] = [];
@@ -668,15 +837,51 @@ export function importCsv(text: string, options: ImportOptions = {}): ImportResu
   const body = records.slice(1);
   const at = (rec: CsvRecord, column: number | null) =>
     (column === null ? "" : rec.cells[column] ?? "").trim();
+  const readable = body.filter((rec) => rec.unterminatedQuote === undefined);
+
+  // A file can contradict the order it was given: 25/12 cannot be month-first
+  // however the upload form was set. Applying the hint anyway reads that row
+  // day-first and every other row month-first, so one ledger carries two
+  // conventions and most of its dates are out by months — which is the error this
+  // importer asks the question to avoid. One of the two is wrong and the file
+  // cannot say which, so it stops here rather than importing half a right answer.
+  const dateColumn = mapping.invoiceDate.column as number;
+  if (options.dateOrder) {
+    const said = options.dateOrder === "dmy" ? "day-first" : "month-first";
+    const against = readable
+      .map((rec) => ({line: rec.line, value: at(rec, dateColumn)}))
+      .filter((cell) => {
+        const forced = forcedOrder(cell.value);
+        return forced !== null && forced !== options.dateOrder;
+      });
+    if (against.length) {
+      const others = against.length - 1;
+      errors.push({
+        row: against[0].line,
+        column: headers[dateColumn] || "invoiceDate",
+        value: against[0].value,
+        reason: `this import was told the file is ${said}, but "${against[0].value}" on line ${against[0].line} cannot be${others ? `, and nor can ${others} other date${others === 1 ? "" : "s"} in this column` : ""}. The rest of the column would still be read ${said}, so the ledger would carry both conventions and most of its dates would be out by months. Check which way round the export writes them and import again.`,
+      });
+      return {rows: [], mapping, unmapped, errors};
+    }
+  }
 
   const amountColumn = mapping.amount.column as number;
-  const decimalComma = sniffDecimalComma(body.map((r) => at(r, amountColumn)));
+  const decimalComma = sniffDecimalComma(readable.map((r) => at(r, amountColumn)));
 
   const rows: Invoice[] = [];
   for (const rec of body) {
     const headerOf = (field: Field) => headers[mapping[field].column as number] || field;
     const fail = (field: Field, value: string, reason: string) =>
       errors.push({row: rec.line, column: headerOf(field), value, reason: `${field}: ${reason}`});
+
+    // Everything from the unclosed quote onwards is inside this record's last
+    // cell, so its columns mean nothing: importing it would hand this invoice a
+    // bank account belonging to a supplier three rows down.
+    if (rec.unterminatedQuote !== undefined) {
+      errors.push(unterminatedQuoteError(rec));
+      continue;
+    }
 
     // A trailing delimiter is a formatting quirk every second ERP has; a row that
     // is genuinely short or long has shifted columns, and every value in it is
