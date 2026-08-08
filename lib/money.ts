@@ -33,4 +33,18 @@ export function money(amount: number, currency?: string, opts: {round?: boolean}
 
 /** For a total whose rows are not all in one currency. */
 export const mixed = (amount: number) =>
-  `${new Intl.NumberFormat("en-GB", {maximumFractionDigits: 0}).format(amount)} (mixed currencies)`;
+  `${new Intl.NumberFormat("en-GB", {minimumFractionDigits: 2, maximumFractionDigits: 2}).format(amount)} (mixed currencies)`;
+
+/**
+ * A date from an ISO timestamp, formatted the same on the server and in the
+ * browser.
+ *
+ * `toLocaleDateString` reads the host's time zone, and the server's is rarely
+ * the reader's — so React renders one date, hydrates another, and warns. Slicing
+ * the ISO string is not merely a workaround: an audit trail should show the
+ * instant as recorded, not as re-interpreted by whichever machine drew it.
+ */
+export function isoDate(iso: string): string {
+  const [y, m, d] = iso.slice(0, 10).split("-");
+  return `${d}/${m}/${y}`;
+}

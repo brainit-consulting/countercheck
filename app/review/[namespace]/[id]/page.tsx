@@ -1,6 +1,6 @@
 import {notFound} from "next/navigation";
 import {ledgerCurrency, readLedger, totals, type Namespace} from "../../../../lib/store";
-import {money, mixed} from "../../../../lib/money";
+import {money, mixed, isoDate} from "../../../../lib/money";
 import {FindingCard} from "./finding-card";
 
 export default async function Review({params}: {params: Promise<{namespace: string; id: string}>}) {
@@ -12,7 +12,7 @@ export default async function Review({params}: {params: Promise<{namespace: stri
   const t = totals(ledger);
   // A single sum across currencies is meaningless; saying so is the honest option.
   const code = ledgerCurrency(ledger);
-  const gbp = (n: number) => (code ? money(n, code, {round: true}) : mixed(n));
+  const gbp = (n: number) => (code ? money(n, code) : mixed(n));
   const invoiceById = new Map(ledger.invoices.map((i) => [i.id, i]));
   const open = ledger.findings.filter((f) => !f.decision);
   const closed = ledger.findings.filter((f) => f.decision);
@@ -84,7 +84,7 @@ export default async function Review({params}: {params: Promise<{namespace: stri
         <ol className="audit">
           {[...ledger.audit].reverse().map((a, i) => (
             <li key={i}>
-              <time dateTime={a.at}>{new Date(a.at).toLocaleString("en-GB")}</time>
+              <time dateTime={a.at}>{isoDate(a.at)} {a.at.slice(11, 16)}</time>
               <span className={`tag tag-${a.action}`}>{a.action}</span>
               <span className="muted">{a.who}</span>
               <span>{a.detail}</span>

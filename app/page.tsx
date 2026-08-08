@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 const fmt = (ledger: Ledger) => {
   const code = ledgerCurrency(ledger);
-  return (n: number) => (code ? money(n, code, {round: true}) : mixed(n));
+  return (n: number) => (code ? money(n, code) : mixed(n));
 };
 
 export default async function Home() {

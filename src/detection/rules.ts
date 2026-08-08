@@ -1,7 +1,7 @@
 import type {DetectionOptions, Finding, Invoice} from "../types";
 import {
   daysBetween, isTransposition, onSchedule, scheduleCadence,
-  normaliseInvoiceNumber, normaliseVendor, vendorSimilarity,
+  normaliseBank, normaliseInvoiceNumber, normaliseVendor, vendorSimilarity,
 } from "./match";
 import {money} from "../../lib/money";
 
@@ -109,25 +109,33 @@ export function vendorSpellingDuplicates(rows: Invoice[], o: DetectionOptions): 
   for (const group of groups.values()) {
     if (group.length < 2) continue;
     const sorted = [...group].sort((a, b) => a.invoiceDate.localeCompare(b.invoiceDate));
-    for (let i = 0; i < sorted.length - 1; i++) {
-      for (let j = i + 1; j < sorted.length; j++) {
-        const a = sorted[i];
-        const b = sorted[j];
-        // Identical spelling is the exact rule's job. Anything else that resolves
-        // to the same supplier belongs here, including names that only differ by
-        // a legal suffix — those normalise to equal, which scores 1.0.
-        if (a.vendorName === b.vendorName) continue;
-        const sim = vendorSimilarity(a.vendorName, b.vendorName);
-        if (sim < o.vendorSimilarity) continue;
-        out.push({
-          ruleId: "vendor-spelling-duplicate",
-          severity: "high",
-          amountAtStake: b.amount,
-          invoiceIds: [a.id, b.id],
-          explanation: `Invoice ${a.invoiceNumber} for ${money(a.amount, a.currency)} was paid to two supplier records that look like the same company: "${a.vendorName}" and "${b.vendorName}".`,
-        });
-      }
-    }
+
+    /**
+     * One finding per problem, not one per pair.
+     *
+     * Emitting every pair independently meant three supplier records for one
+     * company produced three queue items for a single invoice paid three times,
+     * each carrying its own amount at stake — so the headline figure counted the
+     * same money more than once. The rows are gathered into one accusation
+     * instead, which is also how a person would put it.
+     */
+    const first = sorted[0];
+    const sameCompany = sorted.filter((r) =>
+      r === first || vendorSimilarity(first.vendorName, r.vendorName) >= o.vendorSimilarity);
+    const spellings = [...new Set(sameCompany.map((r) => r.vendorName))];
+    // Identical spelling throughout is the exact rule's job. Anything else that
+    // resolves to the same supplier belongs here, including names that differ
+    // only by a legal suffix — those normalise to equal, which scores 1.0.
+    if (sameCompany.length < 2 || spellings.length < 2) continue;
+
+    const extra = sameCompany.length - 1;
+    out.push({
+      ruleId: "vendor-spelling-duplicate",
+      severity: "high",
+      amountAtStake: first.amount * extra,
+      invoiceIds: sameCompany.map((r) => r.id),
+      explanation: `Invoice ${first.invoiceNumber} for ${money(first.amount, first.currency)} was paid ${sameCompany.length} times, to supplier records that look like the same company: ${spellings.map((s) => `"${s}"`).join(", ")}.`,
+    });
   }
   return out;
 }
@@ -197,18 +205,22 @@ export function bankDetailChanges(rows: Invoice[], o: DetectionOptions): Finding
 
   for (const group of byVendor.values()) {
     const sorted = [...group].sort((a, b) => a.invoiceDate.localeCompare(b.invoiceDate));
-    const seen = new Set<string>([sorted[0].bankLast4!]);
+    // Normalised, because "0042" and "42" are one account and raising a
+    // payment-diversion alert over a leading zero is how a real alert gets
+    // ignored.
+    const seen = new Set<string>([normaliseBank(sorted[0].bankLast4)]);
     for (let i = 1; i < sorted.length; i++) {
       const row = sorted[i];
-      if (seen.has(row.bankLast4!)) continue;
+      const acct = normaliseBank(row.bankLast4);
+      if (seen.has(acct)) continue;
       const previous = [...seen].join(", ");
-      seen.add(row.bankLast4!);
+      seen.add(acct);
 
       // Everything that went to the new account from here on, not just the first
       // invoice. In a redirection fraud the first payment is the test and the
       // rest is the loss — ranking this by the test amount buries the largest
       // exposure in the product beneath a stack of smaller duplicates.
-      const toNewAccount = sorted.slice(i).filter((r) => r.bankLast4 === row.bankLast4);
+      const toNewAccount = sorted.slice(i).filter((r) => normaliseBank(r.bankLast4) === acct);
       const exposure = toNewAccount.reduce((s, r) => s + r.amount, 0);
       const more = toNewAccount.length - 1;
 
@@ -217,7 +229,7 @@ export function bankDetailChanges(rows: Invoice[], o: DetectionOptions): Finding
         severity: "high",
         amountAtStake: exposure,
         invoiceIds: [sorted[i - 1].id, ...toNewAccount.map((r) => r.id)],
-        explanation: `Payments to ${row.vendorName} moved to a new bank account ending ${row.bankLast4} on ${row.invoiceDate}, after previously going to ${previous}.${more > 0 ? ` ${more + 1} invoices totalling ${money(exposure, row.currency)} have gone to the new account since.` : ""} Confirm the change by phone using a number you already hold, not one from the invoice.`,
+        explanation: `Payments to ${row.vendorName} moved to a new bank account ending ${acct} on ${row.invoiceDate}, after previously going to ${previous}.${more > 0 ? ` ${more + 1} invoices totalling ${money(exposure, row.currency)} have gone to the new account since.` : ""} Confirm the change by phone using a number you already hold, not one from the invoice.`,
       });
     }
   }

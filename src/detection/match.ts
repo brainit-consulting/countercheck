@@ -58,15 +58,28 @@ export function vendorSimilarity(a: string, b: string): number {
   return 1 - levenshtein(x, y) / longest;
 }
 
-/** Whole days between two ISO dates, absolute. */
+/**
+ * Whole days between two ISO dates, absolute.
+ *
+ * Infinity, not NaN, when a date cannot be read. Every caller compares the
+ * result against a threshold, and NaN fails every comparison silently — the
+ * pair sails past `gap > rekeyWindowDays` and is reported to a human as
+ * "billed twice within NaN days".
+ */
 export function daysBetween(a: string, b: string): number {
   const ms = Math.abs(Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`));
-  return Math.round(ms / 86_400_000);
+  return Number.isFinite(ms) ? Math.round(ms / 86_400_000) : Infinity;
 }
 
 /**
- * True when two amounts differ only by transposed adjacent digits — 1890 vs 1980.
- * A classic keying error that a same-amount rule will never catch.
+ * True when two amounts differ only by two transposed *adjacent* digits —
+ * 1890 vs 1980.
+ *
+ * Adjacency matters. Without it, 1,000,890 and 1,890,000 count as a keying
+ * error, and the finding tells someone their supplier mistyped an amount when
+ * the two numbers are nothing like each other. A finger slipping between two
+ * neighbouring keys is the error this rule is named for; anything else is a
+ * coincidence dressed up as evidence.
  */
 export function isTransposition(a: number, b: number): boolean {
   if (a === b) return false;
@@ -76,8 +89,13 @@ export function isTransposition(a: number, b: number): boolean {
   for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) diff.push(i);
   if (diff.length !== 2) return false;
   const [i, j] = diff;
+  if (j - i !== 1) return false;
   return x[i] === y[j] && x[j] === y[i];
 }
+
+/** Last four digits, however the export chose to render them. */
+export const normaliseBank = (s: string | undefined) =>
+  (s ?? "").replace(/\D/g, "").slice(-4).padStart(4, "0");
 
 /**
  * A vendor+amount pair that recurs on a steady cadence is a subscription or a

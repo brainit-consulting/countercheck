@@ -1,7 +1,7 @@
 import {describe, expect, it} from "vitest";
 import {detect} from "../src/detection/engine";
 import {generateLedger} from "../src/demo/generate";
-import {isTransposition, looksLikeRegularSchedule, scheduleCadence, normaliseInvoiceNumber, normaliseVendor, vendorSimilarity} from "../src/detection/match";
+import {daysBetween, isTransposition, looksLikeRegularSchedule, normaliseBank, scheduleCadence, normaliseInvoiceNumber, normaliseVendor, vendorSimilarity} from "../src/detection/match";
 
 const ledger = generateLedger();
 const result = detect(ledger.rows);
@@ -29,6 +29,27 @@ describe("normalisation", () => {
     expect(isTransposition(1890, 1980)).toBe(true);
     expect(isTransposition(1890, 1890)).toBe(false);
     expect(isTransposition(1890, 2450)).toBe(false);
+  });
+
+  it("only counts adjacent digits, so two distant numbers are not a typo", () => {
+    // 1,000,890 and 1,890,000 are a swap of positions 1 and 4. A finger does not
+    // slip that far, and reporting it tells someone their supplier mistyped an
+    // amount that is nothing like the other.
+    expect(isTransposition(1_000_890, 1_890_000)).toBe(false);
+    expect(isTransposition(12.34, 12.43)).toBe(true);
+  });
+
+  it("treats an unreadable date as infinitely far away, not as NaN", () => {
+    // Every caller compares against a threshold, and NaN fails every comparison
+    // silently — which used to print "billed twice within NaN days".
+    expect(daysBetween("2026-01-01", "not a date")).toBe(Infinity);
+    expect(daysBetween("2026-01-01", "2026-01-08")).toBe(7);
+  });
+
+  it("reads a bank account through however the export rendered it", () => {
+    expect(normaliseBank("****1122")).toBe(normaliseBank("1122"));
+    expect(normaliseBank("42")).toBe(normaliseBank("0042"));
+    expect(normaliseBank("1122")).not.toBe(normaliseBank("2211"));
   });
 
   /**

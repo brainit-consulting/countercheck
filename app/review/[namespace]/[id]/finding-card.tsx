@@ -4,7 +4,7 @@ import {useState, useTransition} from "react";
 import type {Invoice, RuleId} from "../../../../src/types";
 import type {Decision, Namespace, ReviewedFinding} from "../../../../lib/store";
 import {decide} from "../../../actions";
-import {money} from "../../../../lib/money";
+import {money, isoDate} from "../../../../lib/money";
 
 /**
  * A rule id is a fact about the engine; a reviewer needs a name and a next step.
@@ -105,7 +105,7 @@ export function FindingCard({
         <p className="decided-note">
           <span className={`tag tag-${finding.decision}`}>{finding.decision}</span>
           <span>
-            by {finding.decidedBy} on {new Date(finding.decidedAt!).toLocaleDateString("en-GB")}
+            by {finding.decidedBy} on {isoDate(finding.decidedAt!)}
             {finding.reason ? ` — ${finding.reason}` : ""}
           </span>
           <button className="ghost small" disabled={pending} onClick={() => act(null)}>
