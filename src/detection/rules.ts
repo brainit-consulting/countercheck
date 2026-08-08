@@ -203,12 +203,21 @@ export function bankDetailChanges(rows: Invoice[], o: DetectionOptions): Finding
       if (seen.has(row.bankLast4!)) continue;
       const previous = [...seen].join(", ");
       seen.add(row.bankLast4!);
+
+      // Everything that went to the new account from here on, not just the first
+      // invoice. In a redirection fraud the first payment is the test and the
+      // rest is the loss — ranking this by the test amount buries the largest
+      // exposure in the product beneath a stack of smaller duplicates.
+      const toNewAccount = sorted.slice(i).filter((r) => r.bankLast4 === row.bankLast4);
+      const exposure = toNewAccount.reduce((s, r) => s + r.amount, 0);
+      const more = toNewAccount.length - 1;
+
       out.push({
         ruleId: "bank-detail-change",
         severity: "high",
-        amountAtStake: row.amount,
-        invoiceIds: [sorted[i - 1].id, row.id],
-        explanation: `Payments to ${row.vendorName} moved to a new bank account ending ${row.bankLast4} on ${row.invoiceDate}, after previously going to ${previous}. Confirm the change by phone using a number you already hold, not one from the invoice.`,
+        amountAtStake: exposure,
+        invoiceIds: [sorted[i - 1].id, ...toNewAccount.map((r) => r.id)],
+        explanation: `Payments to ${row.vendorName} moved to a new bank account ending ${row.bankLast4} on ${row.invoiceDate}, after previously going to ${previous}.${more > 0 ? ` ${more + 1} invoices totalling ${money(exposure, row.currency)} have gone to the new account since.` : ""} Confirm the change by phone using a number you already hold, not one from the invoice.`,
       });
     }
   }

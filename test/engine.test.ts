@@ -192,6 +192,49 @@ describe("currency", () => {
   });
 });
 
+describe("a bank change is a different question from a duplicate", () => {
+  // Both rules match the same two rows. Collapsing by row set alone deleted the
+  // bank finding, which is the highest-value thing the product detects.
+  const rows = [
+    {id: "1", vendorName: "Halden Systems", invoiceNumber: "HS-1",
+     invoiceDate: "2026-02-01", amount: 3200, currency: "GBP", bankLast4: "8842"},
+    {id: "2", vendorName: "Halden Systems", invoiceNumber: "HS-2",
+     invoiceDate: "2026-02-09", amount: 3200, currency: "GBP", bankLast4: "2077"},
+  ];
+
+  it("reports both, not the stronger one", () => {
+    const ids = detect(rows).findings.map((f) => f.ruleId).sort();
+    expect(ids).toEqual(["bank-detail-change", "rekeyed-duplicate"]);
+  });
+
+  it("counts everything that went to the new account, not just the first invoice", () => {
+    const withMore = [
+      ...rows,
+      {id: "3", vendorName: "Halden Systems", invoiceNumber: "HS-3",
+       invoiceDate: "2026-03-04", amount: 9100, currency: "GBP", bankLast4: "2077"},
+      {id: "4", vendorName: "Halden Systems", invoiceNumber: "HS-4",
+       invoiceDate: "2026-04-02", amount: 7400, currency: "GBP", bankLast4: "2077"},
+    ];
+    const bank = detect(withMore).findings.find((f) => f.ruleId === "bank-detail-change")!;
+    expect(bank.amountAtStake).toBe(3200 + 9100 + 7400);
+    expect(bank.explanation).toContain("3 invoices totalling");
+  });
+});
+
+describe("money formatting", () => {
+  it("does not throw on a currency code Intl does not know", () => {
+    const rows = [
+      {id: "1", vendorName: "Acme", invoiceNumber: "A-1",
+       invoiceDate: "2026-02-01", amount: 900, currency: "ZZZ"},
+      {id: "2", vendorName: "Acme", invoiceNumber: "A-2",
+       invoiceDate: "2026-02-05", amount: 900, currency: "ZZZ"},
+    ];
+    const {findings} = detect(rows);
+    expect(findings.length).toBe(1);
+    expect(findings[0].explanation).toContain("ZZZ");
+  });
+});
+
 describe("precision", () => {
   /**
    * The first version of this engine reported eleven findings against six planted

@@ -4,13 +4,34 @@ import {ALL_RULES} from "./rules";
 const SEVERITY_ORDER = {high: 0, medium: 1, low: 2} as const;
 
 /**
- * The same pair of rows can trip more than one rule — an exact duplicate is also
- * a same-amount pair. Keep the strongest finding per set of rows so the review
- * queue shows a person one decision, not three.
+ * Rules that answer the same question about the same rows, and so must not both
+ * appear in the queue. All four say "these two rows are one payment made twice";
+ * they differ only in how they noticed.
+ *
+ * A bank-detail change is NOT in this family. It is a different question about
+ * the same rows — not "did you pay twice" but "did this money go somewhere new"
+ * — and it was being deleted whenever a duplicate rule happened to cover the
+ * same pair, which quietly threw away the highest-value finding the product has.
+ */
+const DUPLICATE_FAMILY = new Set([
+  "exact-duplicate",
+  "rekeyed-duplicate",
+  "vendor-spelling-duplicate",
+  "amount-transposition",
+]);
+
+/**
+ * The same pair of rows can trip more than one duplicate rule — an exact
+ * duplicate is also a same-amount pair. Keep the strongest of those so the
+ * review queue shows a person one decision, not three. Findings from outside
+ * that family survive alongside it.
  */
 function collapse(findings: Finding[]): Finding[] {
   const best = new Map<string, Finding>();
+  const kept: Finding[] = [];
+
   for (const f of findings) {
+    if (!DUPLICATE_FAMILY.has(f.ruleId)) { kept.push(f); continue; }
     const key = [...f.invoiceIds].sort().join("|");
     const existing = best.get(key);
     if (!existing) { best.set(key, f); continue; }
@@ -19,7 +40,7 @@ function collapse(findings: Finding[]): Finding[] {
       (f.severity === existing.severity && f.amountAtStake > existing.amountAtStake);
     if (stronger) best.set(key, f);
   }
-  return [...best.values()];
+  return [...best.values(), ...kept];
 }
 
 export type DetectionResult = {

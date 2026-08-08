@@ -82,9 +82,11 @@ export async function stageUpload(_prev: unknown, form: FormData): Promise<{erro
  * a ledger that silently lost 40 rows produces a finding count nobody can
  * reconcile against their own system.
  */
-export async function confirmImport(_prev: unknown, form: FormData): Promise<{error: string} | never> {
+export type ImportProblem = {error: string; needsDateOrder?: boolean};
+
+export async function confirmImport(_prev: unknown, form: FormData): Promise<ImportProblem | never> {
   const id = String(form.get("pendingId") ?? "");
-  const pending = readPending(id);
+  const pending = id ? readPending(id) : null;
   if (!pending) return {error: "That upload has expired. Choose the file again."};
 
   const mapping: Partial<Record<Field, number>> = {};
@@ -97,14 +99,33 @@ export async function confirmImport(_prev: unknown, form: FormData): Promise<{er
   const dateOrder = dateOrderRaw === "dmy" || dateOrderRaw === "mdy" ? (dateOrderRaw as DateOrder) : undefined;
 
   const result = importCsv(pending.text, {mapping, dateOrder});
-  if (!result.rows.length) {
+
+  /**
+   * Ambiguous dates stop the import rather than costing it rows.
+   *
+   * The mapping screen only offers the day-first/month-first question when its
+   * own first guess happened to find the date column. If the guess missed it and
+   * the user picked the column by hand, the ambiguity surfaces here for the first
+   * time — and without this, every ambiguous row would simply be dropped and
+   * counted as "skipped", which is the silent months-long shift the product
+   * promises not to do. Asking again is the whole point.
+   */
+  const ambiguous = result.errors.filter((e) => /ambiguous/i.test(e.reason));
+  if (ambiguous.length && !dateOrder) {
     return {
-      error: result.errors[0]?.reason ?? "No rows could be read from that file.",
+      needsDateOrder: true,
+      error: `${ambiguous.length.toLocaleString()} date${ambiguous.length === 1 ? "" : "s"} in this file could be read two ways. Choose which before importing.`,
     };
   }
 
+  if (!result.rows.length) {
+    return {error: result.errors[0]?.reason ?? "No rows could be read from that file."};
+  }
+
   const {findings} = detect(result.rows);
-  const skipped = result.errors.length;
+  // Rows, not errors: one row can fail three coercions, and a count the user
+  // cannot reconcile against their own export is worse than no count at all.
+  const skipped = new Set(result.errors.map((e) => e.row)).size;
   const name = `${pending.name} — ${result.rows.length.toLocaleString()} rows${skipped ? `, ${skipped} skipped` : ""}`;
   const ledger = createLedger("uploads", name, result.rows, findings);
 

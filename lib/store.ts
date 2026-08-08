@@ -52,31 +52,66 @@ export type Ledger = {
 
 export const findingKey = (f: Finding) => `${f.ruleId}:${[...f.invoiceIds].sort().join("+")}`;
 
+/** Ids arrive from the browser, so they are checked rather than trusted. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const nsDir = (ns: Namespace) => path.join(DATA_DIR, ns);
-const filePath = (ns: Namespace, id: string) => path.join(nsDir(ns), `${id}.json`);
+const filePath = (ns: Namespace, id: string) => {
+  // The pending-upload path validated its id from the start and this one did
+  // not, which is the shape most traversal holes have: one careful function and
+  // a sibling nobody looked at twice. `..%2f..%2fetc%2fpasswd` reaches here as a
+  // route parameter.
+  if (!UUID.test(id)) throw new Error("not a ledger id");
+  return path.join(nsDir(ns), `${id}.json`);
+};
 
 function ensure(ns: Namespace) {
   fs.mkdirSync(nsDir(ns), {recursive: true});
 }
 
+/**
+ * Write to a sibling file, then rename over the target.
+ *
+ * A plain writeFileSync truncates first and fills after, so a process killed
+ * between the two leaves a zero-length ledger — and since `listLedgers` parses
+ * every file in the namespace, one truncated ledger takes the whole list down
+ * with a JSON error and no way back through the UI. Rename is atomic on both
+ * NTFS and POSIX, so a reader sees either the old file or the new one.
+ */
 export function saveLedger(ledger: Ledger): Ledger {
   ensure(ledger.namespace);
-  fs.writeFileSync(filePath(ledger.namespace, ledger.id), JSON.stringify(ledger, null, 2), "utf8");
+  const target = filePath(ledger.namespace, ledger.id);
+  const tmp = `${target}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(ledger, null, 2), "utf8");
+  fs.renameSync(tmp, target);
   return ledger;
 }
 
 export function readLedger(ns: Namespace, id: string): Ledger | null {
+  if (!UUID.test(id)) return null;   // a malformed id is a 404, not a crash
   const p = filePath(ns, id);
   if (!fs.existsSync(p)) return null;
-  return JSON.parse(fs.readFileSync(p, "utf8")) as Ledger;
+  try {
+    return JSON.parse(fs.readFileSync(p, "utf8")) as Ledger;
+  } catch {
+    return null;
+  }
 }
 
 export function listLedgers(ns: Namespace): Ledger[] {
   ensure(ns);
-  return fs.readdirSync(nsDir(ns))
-    .filter((f) => f.endsWith(".json"))
-    .map((f) => JSON.parse(fs.readFileSync(path.join(nsDir(ns), f), "utf8")) as Ledger)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const out: Ledger[] = [];
+  for (const f of fs.readdirSync(nsDir(ns))) {
+    if (!f.endsWith(".json")) continue;
+    try {
+      out.push(JSON.parse(fs.readFileSync(path.join(nsDir(ns), f), "utf8")) as Ledger);
+    } catch {
+      // One unreadable file must not hide every other ledger from the front
+      // page. Skip it and keep going; the file is still there to be looked at.
+      continue;
+    }
+  }
+  return out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 export function createLedger(ns: Namespace, name: string, invoices: Invoice[], findings: Finding[]): Ledger {
@@ -88,7 +123,11 @@ export function createLedger(ns: Namespace, name: string, invoices: Invoice[], f
     rowCount: invoices.length,
     invoices,
     findings: findings.map((f) => ({...f, key: findingKey(f)})),
-    audit: [{at: new Date().toISOString(), who: "system", action: "created", detail: `${invoices.length} invoices, ${findings.length} findings`}],
+    audit: [{
+      at: new Date().toISOString(), who: "system", action: "created",
+      detail: `${invoices.length.toLocaleString()} invoice${invoices.length === 1 ? "" : "s"}, ` +
+        `${findings.length} finding${findings.length === 1 ? "" : "s"}`,
+    }],
   });
 }
 
@@ -153,15 +192,39 @@ export function resetDemo(seedFactory: () => {name: string; invoices: Invoice[];
 
 const PENDING_DIR = path.join(DATA_DIR, "pending");
 
-/** Ids arrive from the browser, so they are checked rather than trusted. */
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const pendingPath = (id: string, ext: string) => {
   if (!UUID.test(id)) throw new Error("not a pending upload id");
   return path.join(PENDING_DIR, `${id}.${ext}`);
 };
 
+/**
+ * How long an unconfirmed upload survives.
+ *
+ * The upload page tells the reader the file is "held only until you confirm the
+ * mapping, and then discarded". That was true of confirmed uploads and false of
+ * abandoned ones, which stayed on disk forever — a customer's entire accounts
+ * payable ledger, kept indefinitely by a product whose main claim is that it
+ * does not keep things. A promise in the interface is a retention policy.
+ */
+const PENDING_TTL_MS = 6 * 60 * 60 * 1000;
+
+/** Cheap and opportunistic: runs on upload, which is the only path that adds. */
+function sweepPending() {
+  if (!fs.existsSync(PENDING_DIR)) return;
+  const cutoff = Date.now() - PENDING_TTL_MS;
+  for (const f of fs.readdirSync(PENDING_DIR)) {
+    const p = path.join(PENDING_DIR, f);
+    try {
+      if (fs.statSync(p).mtimeMs < cutoff) fs.rmSync(p, {force: true});
+    } catch {
+      /* a file that vanished under us needs no sweeping */
+    }
+  }
+}
+
 export function savePending(name: string, text: string): string {
   fs.mkdirSync(PENDING_DIR, {recursive: true});
+  sweepPending();
   const id = randomUUID();
   fs.writeFileSync(pendingPath(id, "csv"), text, "utf8");
   fs.writeFileSync(pendingPath(id, "json"), JSON.stringify({name, at: new Date().toISOString()}), "utf8");
@@ -169,9 +232,13 @@ export function savePending(name: string, text: string): string {
 }
 
 export function readPending(id: string): {name: string; text: string} | null {
+  if (!UUID.test(id)) return null;
   const csv = pendingPath(id, "csv");
-  if (!fs.existsSync(csv)) return null;
-  const meta = JSON.parse(fs.readFileSync(pendingPath(id, "json"), "utf8")) as {name: string};
+  const json = pendingPath(id, "json");
+  // Both halves, or neither. A sweep can remove one before the other, and
+  // "expired" is the message for that — not a crash.
+  if (!fs.existsSync(csv) || !fs.existsSync(json)) return null;
+  const meta = JSON.parse(fs.readFileSync(json, "utf8")) as {name: string};
   return {name: meta.name, text: fs.readFileSync(csv, "utf8")};
 }
 

@@ -24,9 +24,16 @@ export function MappingForm({
   const [chosen, setChosen] = useState<Record<string, string>>(
     Object.fromEntries(fields.map((f) => [f, mapping[f].column === null ? "" : String(mapping[f].column)])),
   );
+  const [dateOrder, setDateOrder] = useState<"" | "dmy" | "mdy">("");
 
   const missingRequired = (["vendorName", "invoiceNumber", "invoiceDate", "amount"] as Field[])
     .filter((f) => chosen[f] === "");
+
+  // The guess only found the ambiguity if it found the date column. When the
+  // user maps that column by hand, the server is the first thing to see it — so
+  // the question can arrive from either side.
+  const askDateOrder = needsDateOrder || state?.needsDateOrder === true;
+  const mustAnswerDateOrder = askDateOrder && dateOrder === "";
 
   return (
     <form action={action} className="panel">
@@ -84,10 +91,12 @@ export function MappingForm({
         </tbody>
       </table>
 
-      {needsDateOrder && (
+      {askDateOrder && (
         <fieldset className="date-order">
           <legend>
-            {ambiguousDates.toLocaleString()} dates could be read two ways
+            {ambiguousDates > 0
+              ? `${ambiguousDates.toLocaleString()} dates could be read two ways`
+              : "Some dates could be read two ways"}
           </legend>
           <p className="muted">
             A date like 03/04/2026 is the 3rd of April or the 4th of March depending on
@@ -95,8 +104,22 @@ export function MappingForm({
             shifted by months is the kind of error that survives all the way to a board
             pack.
           </p>
-          <label><input type="radio" name="dateOrder" value="dmy" defaultChecked /> Day first — 03/04 is 3 April</label>
-          <label><input type="radio" name="dateOrder" value="mdy" /> Month first — 03/04 is 4 March</label>
+          {/* Neither is pre-selected. The paragraph above promises Countercheck
+              will not pick, and a checked radio is picking — the reader would
+              have to notice the default to disagree with it, which is exactly
+              the silent months-long shift the copy says it is avoiding. */}
+          <label>
+            <input type="radio" name="dateOrder" value="dmy"
+              checked={dateOrder === "dmy"} disabled={pending}
+              onChange={() => setDateOrder("dmy")} />
+            Day first — 03/04 is 3 April
+          </label>
+          <label>
+            <input type="radio" name="dateOrder" value="mdy"
+              checked={dateOrder === "mdy"} disabled={pending}
+              onChange={() => setDateOrder("mdy")} />
+            Month first — 03/04 is 4 March
+          </label>
         </fieldset>
       )}
 
@@ -106,8 +129,15 @@ export function MappingForm({
           Still needed: {missingRequired.map((f) => labels[f].name).join(", ")}.
         </p>
       )}
+      {mustAnswerDateOrder && (
+        <p className="form-error">Choose how to read the ambiguous dates before continuing.</p>
+      )}
 
-      <button className="primary" type="submit" disabled={pending || missingRequired.length > 0}>
+      <button
+        className="primary"
+        type="submit"
+        disabled={pending || missingRequired.length > 0 || mustAnswerDateOrder}
+      >
         {pending ? "Checking…" : "Check these payments"}
       </button>
     </form>
