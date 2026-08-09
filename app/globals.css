@@ -951,3 +951,54 @@ details > summary:hover { color: var(--ink); }
 @media (hover: none) and (pointer: coarse) {
   .masthead-tools .who { min-height: 44px; }
 }
+
+/* Text inputs.
+ *
+ * Shares .field-label with the file field, and deliberately differs in one
+ * respect: a solid border rather than a dashed one. Dashed reads as "drop
+ * something here", which is right for a file and wrong for a line of typing.
+ *
+ * font-size is 1rem — 19px at this root — and must stay at or above 16px.
+ * Below that, iOS Safari zooms the whole page when the field takes focus, and
+ * the reader has to pinch back out to see what they typed. */
+.text-field { display: grid; gap: 0.45rem; }
+.text-field input {
+  font: inherit;
+  font-size: 1rem;
+  padding: 0.62rem 0.8rem;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  width: min(100%, 26rem);
+  min-height: 44px;              /* HIG minimum, and comfortable to hit */
+  transition: border-color 0.14s ease;
+}
+.text-field input::placeholder { color: var(--ink-faint); }
+.text-field input:hover { border-color: var(--ink-muted); }
+/* No focus style of its own: brand.css already gives :focus-visible a 2px
+ * --focus-ring chosen to clear 3:1 against every surface. A second treatment
+ * here would compete with an accessibility decision already made. */
+.text-field input:focus { border-color: var(--ink); }
+.text-field input:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* Buttons say what they will do, so they should look like they can do it.
+ * Disabled is the state a reader meets before signing in, and it has to read
+ * as "not yet" rather than as "broken". */
+.primary:disabled,
+.secondary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: var(--ink);
+  color: var(--paper);
+}
+.secondary:disabled { background: transparent; color: var(--ink-muted); }
+/* inline-flex, not inline-block: min-height alone would leave the label sitting
+ * at the top of a 44px box. The visual size is unchanged — the hit area grows
+ * to Apple's minimum and the text stays centred in it. */
+.primary, .secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+}

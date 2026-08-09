@@ -878,6 +878,82 @@ never "Something went wrong", never an apology, never an exclamation mark.
 have not watched work first, so the demo path is a peer of the upload path, not a
 footnote under it.
 
+### 11.5 Identity, and who may decide
+
+Added 2026-08-09, when sign-in replaced a hardcoded reviewer.
+
+For the whole of Part 01 every decision was written against the literal string
+`demo reviewer`. An audit trail whose *who* column is a constant is decoration,
+and "a person decided" is this product's only real claim. Everything below
+exists to make that claim checkable rather than asserted.
+
+**The three tiers, and what each one sees.**
+
+| Tier | May do | Interface |
+|---|---|---|
+| Anonymous | Read every finding, every evidence row, the whole audit trail | Decision controls are **present and disabled**. Not hidden. |
+| Signed in | Everything above, and record decisions against their email | Controls live. Masthead shows the address. |
+| Granted | Upload a real export | Not self-serve. See PLAN.md, Part 03. |
+
+**Decision controls are disabled, never hidden, for anonymous readers.** A
+hidden control teaches nothing; a disabled one shows the reader exactly what
+this screen is for and what signing in would let them do. The server refuses
+regardless — `requireUser()` throws — so the disabled attribute is the interface
+agreeing with the rule, never the rule itself. Never rely on a disabled button
+for a decision that matters.
+
+**The identity slot.** `.masthead-tools .who`, sitting beside the read-only
+badge: mono, `--text-2xs`, `--ink-soft`, no border, truncating at `22ch`. It
+reads `Sign in` when nobody is, and the plain email address when someone is.
+
+Deliberately quiet, and deliberately not a button. Most people who open
+Countercheck are here to read, and reading needs no account — a prominent
+call to sign in would tax the majority to serve the minority. It earns
+attention only at the moment it matters, which is when a decision is refused.
+
+**No avatar, no display name, no initials disc.** The audit trail records the
+address someone had to prove they own. A display name is a string they typed,
+and putting a friendly version of it in the masthead while a different string
+sits in the evidence would be two identities for one person.
+
+**Magic link, so several familiar things are absent.** No password field, no
+strength meter, no "forgot your password", no confirm-password, no "stay signed
+in" checkbox. Do not add them back to make the page look conventional — every
+one of them is a thing to store, a flow to build, or a breach to answer for, in
+exchange for nothing this application needs.
+
+**The sign-in form gives the same answer either way.** Whether or not the
+address is known, the reader sees *"If that address can sign in here, a link is
+on its way."* Saying "no account with that email" turns the form into a way of
+finding out who has an account, one address at a time. The wording is a security
+decision and must not be softened into something friendlier.
+
+### 11.6 Text inputs
+
+`.text-field`, sharing `.field-label` with the file field, and differing from it
+in exactly one respect: a **solid** border rather than a dashed one. Dashed reads
+as *drop something here*, which is right for a file and wrong for a line of
+typing.
+
+`font-size` is `1rem` — 19px at this root — and **must never fall below 16px**.
+Below that, iOS Safari zooms the whole page when the field takes focus and the
+reader has to pinch back out to see what they typed. This is the reason the
+figure is written as `1rem` and not as a smaller literal.
+
+`min-height: 44px`, per Apple's minimum hit area. `.primary` and `.secondary`
+are `inline-flex` for the same reason: `min-height` alone would leave the label
+sitting at the top of a 44px box rather than centred in it.
+
+**Focus is not restyled here.** §11.3 already gives `:focus-visible` a 2px
+`--focus-ring` chosen to clear 3:1 against every surface. A second treatment on
+text fields would compete with an accessibility decision already made and
+verified.
+
+**Disabled reads as "not yet", not as "broken".** `opacity: 0.45` with the fill
+retained, so a disabled primary is still legibly the primary action. This is the
+first state an anonymous reader meets, and it should invite the question *how do
+I turn this on* rather than suggest the page has failed.
+
 ---
 
 ## 12. Deliberately not used

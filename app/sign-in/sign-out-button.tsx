@@ -9,6 +9,7 @@ export function SignOutButton() {
   const [busy, setBusy] = useState(false);
   return (
     <button
+      className="secondary"
       type="button"
       disabled={busy}
       onClick={async () => {

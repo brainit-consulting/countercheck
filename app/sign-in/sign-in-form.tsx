@@ -40,7 +40,7 @@ export function SignInForm() {
           If <strong>{email}</strong> can sign in here, a link is on its way. It
           works once and expires in fifteen minutes.
         </p>
-        <p className="note">
+        <p className="muted small-print">
           Nothing has changed on your account, and no one has been told you asked.
         </p>
       </div>
@@ -48,27 +48,29 @@ export function SignInForm() {
   }
 
   return (
-    <form onSubmit={submit}>
-      <label className="field">
+    <form onSubmit={submit} className="upload-form">
+      <label className="text-field">
         <span className="field-label">Email address</span>
         <input
           type="email"
           name="email"
           required
           autoComplete="email"
+          inputMode="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@yourcompany.com"
+          disabled={state === "sending"}
         />
       </label>
 
-      <button type="submit" disabled={state === "sending" || email.length === 0}>
+      {state === "error" && <p className="form-error" role="alert">{message}</p>}
+
+      <button className="primary" type="submit" disabled={state === "sending" || email.length === 0}>
         {state === "sending" ? "Sending…" : "Email me a link"}
       </button>
 
-      {state === "error" && <p className="note error">{message}</p>}
-
-      <p className="note">
+      <p className="muted small-print">
         No password. The link is the sign-in, and your email address is what
         appears next to any decision you record.
       </p>
