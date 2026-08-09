@@ -915,7 +915,10 @@ details > summary:hover { color: var(--ink); }
 .audit { list-style: none; padding: 0; margin: 0; font-size: 0.84rem; }
 .audit li {
   display: grid;
-  grid-template-columns: 11rem 6.5rem 9rem 1fr;
+  /* The "who" column was 9rem, which fitted "demo reviewer" and does not fit
+     an email address. It holds real identities now, so it sizes to the address
+     up to a limit and the detail takes what is left. */
+  grid-template-columns: 11rem 6.5rem minmax(9rem, max-content) 1fr;
   gap: 0.8rem;
   align-items: baseline;
   padding: 0.45rem 0;
@@ -923,6 +926,10 @@ details > summary:hover { color: var(--ink); }
 }
 .audit time { font-family: var(--font-mono); font-size: 0.76rem; color: var(--ink-faint); }
 .audit .tag { justify-self: start; }
+.audit .who { overflow-wrap: anywhere; }
+/* The explanation is stored whole now rather than sliced at 90 characters, so
+   it wraps here instead of being cut mid-word in the database. */
+.audit .detail { overflow-wrap: anywhere; }
 
 @media (max-width: 46rem) {
   .audit li { grid-template-columns: 1fr; gap: 0.2rem; }

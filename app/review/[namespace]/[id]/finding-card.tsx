@@ -1,6 +1,6 @@
 "use client";
 
-import {useState, useTransition} from "react";
+import {useEffect, useState, useTransition} from "react";
 import type {Invoice, RuleId} from "../../../../src/types";
 import type {Decision, Namespace, ReviewedFinding} from "../../../../lib/store";
 import {decide} from "../../../actions";
@@ -58,9 +58,48 @@ export function FindingCard({
   const [pending, start] = useTransition();
   const rule = RULES[finding.ruleId];
 
+  /**
+   * A note is kept in this browser until a decision is recorded.
+   *
+   * It is deliberately NOT saved to the server as you type. A note stored
+   * without a decision would be a fourth state that nothing counts — the same
+   * shape as the "deferred" bug that took findings and their money out of every
+   * total. The note is an attribute of the decision, not a thing of its own.
+   *
+   * But losing carefully typed words because someone clicked away is its own
+   * kind of dishonesty, so the draft lives in localStorage, keyed by the
+   * finding, and is cleared the moment the decision it belongs to is recorded.
+   */
+  const draftKey = `countercheck:note:${ledgerId}:${finding.key}`;
+
+  useEffect(() => {
+    if (finding.reason) return;              // a recorded reason wins over a draft
+    try {
+      const saved = window.localStorage.getItem(draftKey);
+      if (saved) setReason(saved);
+    } catch {
+      /* private browsing, or storage full. A missing draft is not an error. */
+    }
+  }, [draftKey, finding.reason]);
+
+  const onReason = (value: string) => {
+    setReason(value);
+    try {
+      if (value.trim()) window.localStorage.setItem(draftKey, value);
+      else window.localStorage.removeItem(draftKey);
+    } catch {
+      /* nothing to do, and nothing worth telling the reader about */
+    }
+  };
+
   const act = (decision: Decision | null) =>
     start(async () => {
       await decide(namespace, ledgerId, finding.key, decision, reason.trim() || undefined);
+      try {
+        window.localStorage.removeItem(draftKey);
+      } catch {
+        /* see above */
+      }
     });
 
   return (
@@ -122,8 +161,9 @@ export function FindingCard({
             type="text"
             placeholder="Note (optional) — what you found, or why it's fine"
             value={reason}
-            onChange={(e) => setReason(e.target.value)}
+            onChange={(e) => onReason(e.target.value)}
             disabled={pending || !signedIn}
+            title="Saved with the decision, not as you type. What you have written is kept in this browser until then, so leaving the page will not lose it."
           />
           <button className="decision decision-accept small" disabled={pending || !signedIn} onClick={() => act("accepted")}
             title={signedIn ? "Record that this finding is real. Nothing is paid, voided or altered — it is written down against your name." : "Sign in to record a decision. Anyone may read; deciding needs a person."}>

@@ -190,8 +190,15 @@ export async function recordDecision(
   // this table, and nothing in this file updates or deletes from it.
   await sql.query(
     `insert into ${T.audit} (ledger_id, at, who, action, detail) values ($1, $2, $3, $4, $5)`,
+    // The whole explanation, not the first 90 characters of it.
+    //
+    // It used to be sliced, which cut lines mid-word — "to supplier records
+    // that look like the sam". An audit trail holding a mangled copy of the
+    // reason is worse than one holding a long one: the column is text, the
+    // rows are few, and someone reading back a decision months later needs the
+    // sentence that was actually put to them.
     [ledgerId, at, who, decision ?? "reopened",
-      `${finding.ruleId} — ${finding.explanation.slice(0, 90)}${reason ? ` (${reason})` : ""}`],
+      `${finding.ruleId} — ${finding.explanation}${reason ? ` (${reason})` : ""}`],
   );
   return readLedger(ns, ledgerId);
 }

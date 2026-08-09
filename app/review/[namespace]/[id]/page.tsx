@@ -97,8 +97,8 @@ export default async function Review({params}: {params: Promise<{namespace: stri
             <li key={i}>
               <time dateTime={a.at}>{isoDate(a.at)} {a.at.slice(11, 16)}</time>
               <span className={`tag tag-${a.action}`}>{a.action}</span>
-              <span className="muted">{a.who}</span>
-              <span>{a.detail}</span>
+              <span className="muted who">{a.who}</span>
+              <span className="detail">{a.detail}</span>
             </li>
           ))}
         </ol>
