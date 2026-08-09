@@ -4,3 +4,12 @@ node_modules
 *.tsbuildinfo
 next-env.d.ts
 .env*
+.vercel
+
+# Agent skills installed as a side effect of `vercel integration add neon`.
+# They are editor tooling, not part of the application, and they run with full
+# agent permissions — so they are reviewed in place and not carried in the repo
+# that gets read on camera.
+.agents/
+.claude/
+skills-lock.json
