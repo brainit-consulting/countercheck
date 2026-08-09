@@ -15,7 +15,7 @@ const fmt = (ledger: Ledger) => {
 
 export default async function Home() {
   const demo = await ensureDemoLedger();
-  const uploads = listLedgers("uploads");
+  const uploads = await listLedgers("uploads");
   const t = totals(demo);
   const gbp = fmt(demo);
 

@@ -1,21 +1,22 @@
 import {randomUUID} from "node:crypto";
-import fs from "node:fs";
-import path from "node:path";
 import type {Finding, Invoice} from "../src/types";
+import {ensureSchema, sql, T} from "./db";
 
 /**
- * A small file-backed store, so the MVP runs with no database and no environment
- * variables — you can clone it and see real findings in one command.
+ * The store, backed by Postgres.
  *
- * Deliberately behind a narrow interface. Every read and write goes through the
- * functions below, so swapping in Drizzle and Neon later is a change to this file
- * alone rather than a change to every screen.
+ * Part 01 ran this on a JSON file per ledger, which was right while the
+ * specification was the product. It is behind a narrow interface for exactly
+ * this reason: swapping the substrate is a change to this file and the `await`
+ * keyword at its callers, not a change to every screen.
+ *
+ * Every function here is async now. That is the only part of the change that
+ * reaches outside this file.
  */
 
-const DATA_DIR = process.env.COUNTERCHECK_DATA ?? path.join(process.cwd(), ".data");
-
 /** Demo and real ledgers live in separate namespaces so a demo reset can never
- * reach uploaded data. This is enforced by path, not by a conditional. */
+ * reach uploaded data. This is now a column with a check constraint — the
+ * database refuses a third value rather than trusting the caller. */
 export type Namespace = "demo" | "uploads";
 
 /**
@@ -24,8 +25,8 @@ export type Namespace = "demo" | "uploads";
  * There was briefly a "deferred" state, written by the Reopen button. Nothing
  * counted it: `totals` sums open, accepted and rejected, so a deferred finding
  * left the queue, left every total, and took its money with it. A state no
- * screen can render is not a state, it is a leak — reopening now clears the
- * decision and the finding returns to the queue it came from.
+ * screen can render is not a state, it is a leak — reopening now deletes the
+ * decision row and the finding returns to the queue it came from.
  */
 export type Decision = "accepted" | "rejected";
 
@@ -52,131 +53,161 @@ export type Ledger = {
 
 export const findingKey = (f: Finding) => `${f.ruleId}:${[...f.invoiceIds].sort().join("+")}`;
 
-/** Ids arrive from the browser, so they are checked rather than trusted. */
+/** Ids arrive from the browser, so they are checked rather than trusted. Query
+ * parameters make injection a non-issue, but a malformed id should be a 404
+ * rather than a database round trip and a type error. */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const nsDir = (ns: Namespace) => path.join(DATA_DIR, ns);
-const filePath = (ns: Namespace, id: string) => {
-  // The pending-upload path validated its id from the start and this one did
-  // not, which is the shape most traversal holes have: one careful function and
-  // a sibling nobody looked at twice. `..%2f..%2fetc%2fpasswd` reaches here as a
-  // route parameter.
-  if (!UUID.test(id)) throw new Error("not a ledger id");
-  return path.join(nsDir(ns), `${id}.json`);
+const iso = (v: unknown): string =>
+  v instanceof Date ? v.toISOString() : String(v);
+
+type LedgerRow = {
+  id: string; namespace: Namespace; name: string; created_at: unknown;
+  row_count: number; invoices: Invoice[]; findings: ReviewedFinding[];
 };
+type DecisionRow = {
+  ledger_id: string; finding_key: string; decision: Decision;
+  decided_by: string; decided_at: unknown; reason: string | null;
+};
+type AuditRow = {ledger_id: string; at: unknown; who: string; action: string; detail: string};
 
-function ensure(ns: Namespace) {
-  fs.mkdirSync(nsDir(ns), {recursive: true});
+/** Stitches the three tables into the shape every screen already expects. */
+function assemble(row: LedgerRow, decisions: DecisionRow[], audit: AuditRow[]): Ledger {
+  const byKey = new Map(decisions.map((d) => [d.finding_key, d]));
+  return {
+    id: row.id,
+    namespace: row.namespace,
+    name: row.name,
+    createdAt: iso(row.created_at),
+    rowCount: row.row_count,
+    invoices: row.invoices,
+    findings: row.findings.map((f) => {
+      const d = byKey.get(f.key);
+      if (!d) return {...f, decision: undefined, decidedBy: undefined, decidedAt: undefined, reason: undefined};
+      return {
+        ...f,
+        decision: d.decision,
+        decidedBy: d.decided_by,
+        decidedAt: iso(d.decided_at),
+        reason: d.reason ?? undefined,
+      };
+    }),
+    audit: audit.map((a) => ({at: iso(a.at), who: a.who, action: a.action, detail: a.detail})),
+  };
 }
 
-/**
- * Write to a sibling file, then rename over the target.
- *
- * A plain writeFileSync truncates first and fills after, so a process killed
- * between the two leaves a zero-length ledger — and since `listLedgers` parses
- * every file in the namespace, one truncated ledger takes the whole list down
- * with a JSON error and no way back through the UI. Rename is atomic on both
- * NTFS and POSIX, so a reader sees either the old file or the new one.
- */
-export function saveLedger(ledger: Ledger): Ledger {
-  ensure(ledger.namespace);
-  const target = filePath(ledger.namespace, ledger.id);
-  const tmp = `${target}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(ledger, null, 2), "utf8");
-  fs.renameSync(tmp, target);
-  return ledger;
-}
-
-export function readLedger(ns: Namespace, id: string): Ledger | null {
+export async function readLedger(ns: Namespace, id: string): Promise<Ledger | null> {
   if (!UUID.test(id)) return null;   // a malformed id is a 404, not a crash
-  const p = filePath(ns, id);
-  if (!fs.existsSync(p)) return null;
-  try {
-    return JSON.parse(fs.readFileSync(p, "utf8")) as Ledger;
-  } catch {
-    return null;
-  }
+  await ensureSchema();
+  const rows = (await sql.query(
+    `select * from ${T.ledgers} where id = $1 and namespace = $2`, [id, ns],
+  )) as LedgerRow[];
+  if (!rows.length) return null;
+  const decisions = (await sql.query(
+    `select * from ${T.decisions} where ledger_id = $1`, [id],
+  )) as DecisionRow[];
+  const audit = (await sql.query(
+    `select * from ${T.audit} where ledger_id = $1 order by id`, [id],
+  )) as AuditRow[];
+  return assemble(rows[0], decisions, audit);
 }
 
-export function listLedgers(ns: Namespace): Ledger[] {
-  ensure(ns);
-  const out: Ledger[] = [];
-  for (const f of fs.readdirSync(nsDir(ns))) {
-    if (!f.endsWith(".json")) continue;
-    try {
-      out.push(JSON.parse(fs.readFileSync(path.join(nsDir(ns), f), "utf8")) as Ledger);
-    } catch {
-      // One unreadable file must not hide every other ledger from the front
-      // page. Skip it and keep going; the file is still there to be looked at.
-      continue;
-    }
-  }
-  return out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+export async function listLedgers(ns: Namespace): Promise<Ledger[]> {
+  await ensureSchema();
+  const rows = (await sql.query(
+    `select * from ${T.ledgers} where namespace = $1 order by created_at desc`, [ns],
+  )) as LedgerRow[];
+  if (!rows.length) return [];
+  const ids = rows.map((r) => r.id);
+  // Two queries for the whole page rather than two per ledger.
+  const decisions = (await sql.query(
+    `select * from ${T.decisions} where ledger_id = any($1::uuid[])`, [ids],
+  )) as DecisionRow[];
+  const audit = (await sql.query(
+    `select * from ${T.audit} where ledger_id = any($1::uuid[]) order by id`, [ids],
+  )) as AuditRow[];
+  return rows.map((r) =>
+    assemble(r, decisions.filter((d) => d.ledger_id === r.id), audit.filter((a) => a.ledger_id === r.id)));
 }
 
-export function createLedger(ns: Namespace, name: string, invoices: Invoice[], findings: Finding[]): Ledger {
-  return saveLedger({
-    id: randomUUID(),
-    namespace: ns,
-    name,
-    createdAt: new Date().toISOString(),
-    rowCount: invoices.length,
-    invoices,
-    findings: findings.map((f) => ({...f, key: findingKey(f)})),
-    audit: [{
-      at: new Date().toISOString(), who: "system", action: "created",
-      detail: `${invoices.length.toLocaleString()} invoice${invoices.length === 1 ? "" : "s"}, ` +
-        `${findings.length} finding${findings.length === 1 ? "" : "s"}`,
-    }],
-  });
+export async function createLedger(
+  ns: Namespace, name: string, invoices: Invoice[], findings: Finding[],
+): Promise<Ledger> {
+  await ensureSchema();
+  const id = randomUUID();
+  const at = new Date().toISOString();
+  const withKeys = findings.map((f) => ({...f, key: findingKey(f)}));
+  await sql.query(
+    `insert into ${T.ledgers} (id, namespace, name, created_at, row_count, invoices, findings)
+     values ($1, $2, $3, $4, $5, $6, $7)`,
+    [id, ns, name, at, invoices.length, JSON.stringify(invoices), JSON.stringify(withKeys)],
+  );
+  await sql.query(
+    `insert into ${T.audit} (ledger_id, at, who, action, detail) values ($1, $2, $3, $4, $5)`,
+    [id, at, "system", "created",
+      `${invoices.length.toLocaleString()} invoice${invoices.length === 1 ? "" : "s"}, ` +
+      `${findings.length} finding${findings.length === 1 ? "" : "s"}`],
+  );
+  return (await readLedger(ns, id))!;
 }
 
 /** `decision: null` reopens: the finding goes back to the queue undecided. */
-export function recordDecision(
+export async function recordDecision(
   ns: Namespace, ledgerId: string, key: string,
   decision: Decision | null, who: string, reason?: string,
-): Ledger | null {
-  const ledger = readLedger(ns, ledgerId);
-  if (!ledger) return null;
-  const finding = ledger.findings.find((f) => f.key === key);
+): Promise<Ledger | null> {
+  if (!UUID.test(ledgerId)) return null;
+  await ensureSchema();
+
+  // The finding has to exist on this ledger before anything is written. The
+  // check is against the stored document, so a key invented in the browser
+  // cannot create a decision for a finding that was never raised.
+  const rows = (await sql.query(
+    `select findings from ${T.ledgers} where id = $1 and namespace = $2`, [ledgerId, ns],
+  )) as {findings: ReviewedFinding[]}[];
+  if (!rows.length) return null;
+  const finding = rows[0].findings.find((f) => f.key === key);
   if (!finding) return null;
 
   const at = new Date().toISOString();
   if (decision === null) {
-    delete finding.decision;
-    delete finding.decidedBy;
-    delete finding.decidedAt;
-    delete finding.reason;
+    await sql.query(
+      `delete from ${T.decisions} where ledger_id = $1 and finding_key = $2`, [ledgerId, key],
+    );
   } else {
-    finding.decision = decision;
-    finding.decidedBy = who;
-    finding.decidedAt = at;
-    finding.reason = reason;
+    await sql.query(
+      `insert into ${T.decisions} (ledger_id, finding_key, decision, decided_by, decided_at, reason)
+       values ($1, $2, $3, $4, $5, $6)
+       on conflict (ledger_id, finding_key) do update set
+         decision = excluded.decision, decided_by = excluded.decided_by,
+         decided_at = excluded.decided_at, reason = excluded.reason`,
+      [ledgerId, key, decision, who, at, reason ?? null],
+    );
   }
 
   // Append-only: a corrected decision adds a line, it never edits the previous
-  // one. Clearing the decision on the finding is not rewriting history — the
-  // history is here.
-  ledger.audit.push({
-    at, who, action: decision ?? "reopened",
-    detail: `${finding.ruleId} — ${finding.explanation.slice(0, 90)}${reason ? ` (${reason})` : ""}`,
-  });
-  return saveLedger(ledger);
+  // one. Clearing the decision row is not rewriting history — the history is
+  // this table, and nothing in this file updates or deletes from it.
+  await sql.query(
+    `insert into ${T.audit} (ledger_id, at, who, action, detail) values ($1, $2, $3, $4, $5)`,
+    [ledgerId, at, who, decision ?? "reopened",
+      `${finding.ruleId} — ${finding.explanation.slice(0, 90)}${reason ? ` (${reason})` : ""}`],
+  );
+  return readLedger(ns, ledgerId);
 }
 
 /**
  * Wipe and reseed the demo namespace.
  *
  * Takes no namespace argument on purpose. A reset that could be pointed at a
- * namespace is a reset that can one day be pointed at the wrong one — the
- * guard below is a second line of defence, not the only one.
+ * namespace is a reset that can one day be pointed at the wrong one. The delete
+ * names 'demo' literally; there is no variable to get wrong.
  */
-export function resetDemo(seedFactory: () => {name: string; invoices: Invoice[]; findings: Finding[]}) {
-  const dir = nsDir("demo");
-  if (!dir.includes(`${path.sep}demo`)) {
-    throw new Error(`refusing to reset: ${dir} is not the demo namespace`);
-  }
-  fs.rmSync(dir, {recursive: true, force: true});
+export async function resetDemo(
+  seedFactory: () => {name: string; invoices: Invoice[]; findings: Finding[]},
+): Promise<Ledger> {
+  await ensureSchema();
+  await sql.query(`delete from ${T.ledgers} where namespace = 'demo'`);
   const seed = seedFactory();
   return createLedger("demo", seed.name, seed.invoices, seed.findings);
 }
@@ -186,64 +217,52 @@ export function resetDemo(seedFactory: () => {name: string; invoices: Invoice[];
  *
  * A CSV is read twice: once to suggest a column mapping, once to import under
  * the mapping the user confirmed. The file has to survive between the two, and
- * round-tripping several megabytes through a hidden form field to avoid writing
- * a temporary file is a trade nobody wins.
+ * round-tripping several megabytes through a hidden form field to avoid storing
+ * it is a trade nobody wins.
  * ------------------------------------------------------------------------- */
-
-const PENDING_DIR = path.join(DATA_DIR, "pending");
-
-const pendingPath = (id: string, ext: string) => {
-  if (!UUID.test(id)) throw new Error("not a pending upload id");
-  return path.join(PENDING_DIR, `${id}.${ext}`);
-};
 
 /**
  * How long an unconfirmed upload survives.
  *
  * The upload page tells the reader the file is "held only until you confirm the
  * mapping, and then discarded". That was true of confirmed uploads and false of
- * abandoned ones, which stayed on disk forever — a customer's entire accounts
- * payable ledger, kept indefinitely by a product whose main claim is that it
- * does not keep things. A promise in the interface is a retention policy.
+ * abandoned ones, which stayed forever — a customer's entire accounts payable
+ * ledger, kept indefinitely by a product whose main claim is that it does not
+ * keep things. A promise in the interface is a retention policy.
  */
 const PENDING_TTL_MS = 6 * 60 * 60 * 1000;
 
 /** Cheap and opportunistic: runs on upload, which is the only path that adds. */
-function sweepPending() {
-  if (!fs.existsSync(PENDING_DIR)) return;
-  const cutoff = Date.now() - PENDING_TTL_MS;
-  for (const f of fs.readdirSync(PENDING_DIR)) {
-    const p = path.join(PENDING_DIR, f);
-    try {
-      if (fs.statSync(p).mtimeMs < cutoff) fs.rmSync(p, {force: true});
-    } catch {
-      /* a file that vanished under us needs no sweeping */
-    }
-  }
+async function sweepPending(): Promise<void> {
+  const cutoff = new Date(Date.now() - PENDING_TTL_MS).toISOString();
+  await sql.query(`delete from ${T.pending} where created_at < $1`, [cutoff]);
 }
 
-export function savePending(name: string, text: string): string {
-  fs.mkdirSync(PENDING_DIR, {recursive: true});
-  sweepPending();
+export async function savePending(name: string, text: string): Promise<string> {
+  await ensureSchema();
+  await sweepPending();
   const id = randomUUID();
-  fs.writeFileSync(pendingPath(id, "csv"), text, "utf8");
-  fs.writeFileSync(pendingPath(id, "json"), JSON.stringify({name, at: new Date().toISOString()}), "utf8");
+  await sql.query(
+    `insert into ${T.pending} (id, name, csv, created_at) values ($1, $2, $3, $4)`,
+    [id, name, text, new Date().toISOString()],
+  );
   return id;
 }
 
-export function readPending(id: string): {name: string; text: string} | null {
+export async function readPending(id: string): Promise<{name: string; text: string} | null> {
   if (!UUID.test(id)) return null;
-  const csv = pendingPath(id, "csv");
-  const json = pendingPath(id, "json");
-  // Both halves, or neither. A sweep can remove one before the other, and
-  // "expired" is the message for that — not a crash.
-  if (!fs.existsSync(csv) || !fs.existsSync(json)) return null;
-  const meta = JSON.parse(fs.readFileSync(json, "utf8")) as {name: string};
-  return {name: meta.name, text: fs.readFileSync(csv, "utf8")};
+  await ensureSchema();
+  const rows = (await sql.query(
+    `select name, csv from ${T.pending} where id = $1`, [id],
+  )) as {name: string; csv: string}[];
+  if (!rows.length) return null;
+  return {name: rows[0].name, text: rows[0].csv};
 }
 
-export function discardPending(id: string) {
-  for (const ext of ["csv", "json"]) fs.rmSync(pendingPath(id, ext), {force: true});
+export async function discardPending(id: string): Promise<void> {
+  if (!UUID.test(id)) return;
+  await ensureSchema();
+  await sql.query(`delete from ${T.pending} where id = $1`, [id]);
 }
 
 /**

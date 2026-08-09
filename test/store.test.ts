@@ -1,7 +1,6 @@
 import {afterAll, beforeAll, describe, expect, it} from "vitest";
+import type {Ledger} from "../lib/store";
 import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 
 /**
  * The invariant Part 01 says should have existed and did not.
@@ -14,18 +13,35 @@ import path from "node:path";
  *
  * So: after any sequence of decisions a reviewer can perform, the three columns
  * must account for every finding, and for every pound.
+ *
+ * These run against a real Postgres in a throwaway schema, not against a mock.
+ * A mock of a database tells you your mock works — and the bug this file exists
+ * to catch was a disagreement between what was stored and what was counted,
+ * which is exactly the class of bug a mock cannot see.
  */
 
-const DATA = fs.mkdtempSync(path.join(os.tmpdir(), "countercheck-store-"));
-process.env.COUNTERCHECK_DATA = DATA;
+// Next loads .env.local for `next dev` and `next build`; vitest does not, so a
+// test run would otherwise fail on a missing DATABASE_URL while the app works.
+if (!process.env.DATABASE_URL && fs.existsSync(".env.local")) process.loadEnvFile(".env.local");
+if (!process.env.DATABASE_URL) {
+  throw new Error(
+    "These tests run against a real Postgres. Run `vercel env pull .env.local` first.",
+  );
+}
 
-// Imported after the env var is set, because the store resolves its directory
-// once at module load.
+// Set before importing the store, which reads the schema name once at load.
+// Per-process, so two runs in parallel cannot share a table.
+const SCHEMA = `countercheck_test_${process.pid}`;
+process.env.COUNTERCHECK_SCHEMA = SCHEMA;
+
+const db = await import("../lib/db");
 const store = await import("../lib/store");
 const {generateLedger} = await import("../src/demo/generate");
 const {detect} = await import("../src/detection/engine");
 
-afterAll(() => fs.rmSync(DATA, {recursive: true, force: true}));
+afterAll(async () => {
+  await db.sql.query(`drop schema if exists ${SCHEMA} cascade`);
+});
 
 let ledger: Awaited<ReturnType<typeof makeLedger>>;
 
@@ -39,9 +55,9 @@ beforeAll(async () => {
   ledger = await makeLedger();
 });
 
-const reread = () => store.readLedger("uploads", ledger.id)!;
+const reread = async () => (await store.readLedger("uploads", ledger.id))!;
 
-const accountsForEverything = (l: ReturnType<typeof reread>) => {
+const accountsForEverything = (l: Ledger) => {
   const t = store.totals(l);
   const pennies = (n: number) => Math.round(n * 100);
   return {
@@ -52,15 +68,15 @@ const accountsForEverything = (l: ReturnType<typeof reread>) => {
 };
 
 describe("every finding and every pound is in exactly one column", () => {
-  it("holds before anything is decided", () => {
-    const {counts, money, t} = accountsForEverything(reread());
+  it("holds before anything is decided", async () => {
+    const {counts, money, t} = accountsForEverything(await reread());
     expect(counts, `open ${t.open} + accepted ${t.accepted} + rejected ${t.rejected} ≠ ${t.total}`).toBe(true);
     expect(money).toBe(true);
     expect(t.open).toBe(t.total);
   });
 
-  it("holds after every sequence of decisions a reviewer can perform", () => {
-    const keys = reread().findings.map((f) => f.key);
+  it("holds after every sequence of decisions a reviewer can perform", async () => {
+    const keys = (await reread()).findings.map((f) => f.key);
     // Accept, reject, reopen, decide again, reopen again — the orderings a
     // person actually produces when they change their mind.
     const script: Array<[string, "accepted" | "rejected" | null]> = [
@@ -77,8 +93,8 @@ describe("every finding and every pound is in exactly one column", () => {
     ];
 
     for (const [key, decision] of script) {
-      store.recordDecision("uploads", ledger.id, key, decision, "test reviewer");
-      const {counts, money, t} = accountsForEverything(reread());
+      await store.recordDecision("uploads", ledger.id, key, decision, "test reviewer");
+      const {counts, money, t} = accountsForEverything(await reread());
       expect(
         counts,
         `after ${decision ?? "reopen"} on ${key}: open ${t.open} + accepted ${t.accepted} + rejected ${t.rejected} ≠ total ${t.total}`,
@@ -87,13 +103,13 @@ describe("every finding and every pound is in exactly one column", () => {
     }
   });
 
-  it("returns a reopened finding to the queue with its money", () => {
-    const l = reread();
+  it("returns a reopened finding to the queue with its money", async () => {
+    const l = await reread();
     const key = l.findings[0].key;
-    store.recordDecision("uploads", ledger.id, key, "accepted", "test reviewer");
-    const confirmed = store.totals(reread());
-    store.recordDecision("uploads", ledger.id, key, null, "test reviewer");
-    const reopened = store.totals(reread());
+    await store.recordDecision("uploads", ledger.id, key, "accepted", "test reviewer");
+    const confirmed = store.totals(await reread());
+    await store.recordDecision("uploads", ledger.id, key, null, "test reviewer");
+    const reopened = store.totals(await reread());
 
     expect(confirmed.acceptedValue).toBeGreaterThan(0);
     expect(reopened.acceptedValue).toBe(confirmed.acceptedValue - l.findings[0].amountAtStake);
@@ -101,8 +117,8 @@ describe("every finding and every pound is in exactly one column", () => {
     expect(reopened.open).toBe(confirmed.open + 1);
   });
 
-  it("keeps the audit trail append-only through all of it", () => {
-    const audit = reread().audit;
+  it("keeps the audit trail append-only through all of it", async () => {
+    const audit = (await reread()).audit;
     // One creation line plus one per decision recorded above; never fewer, and
     // never edited in place.
     expect(audit.length).toBeGreaterThan(10);
@@ -114,20 +130,29 @@ describe("every finding and every pound is in exactly one column", () => {
 });
 
 describe("the demo reset cannot reach uploaded data", () => {
-  it("leaves the uploads namespace alone", () => {
-    const before = store.listLedgers("uploads").map((l) => l.id).sort();
-    store.resetDemo(() => {
+  it("leaves the uploads namespace alone", async () => {
+    const before = (await store.listLedgers("uploads")).map((l) => l.id).sort();
+    await store.resetDemo(() => {
       const demo = generateLedger();
       return {name: "demo", invoices: demo.rows, findings: detect(demo.rows).findings};
     });
-    expect(store.listLedgers("uploads").map((l) => l.id).sort()).toEqual(before);
+    expect((await store.listLedgers("uploads")).map((l) => l.id).sort()).toEqual(before);
   });
 });
 
 describe("ids from the browser are not trusted", () => {
-  it("refuses a traversal attempt instead of reading the file", () => {
-    expect(store.readLedger("uploads", "../../../../etc/passwd")).toBeNull();
-    expect(store.readLedger("uploads", "not-a-uuid")).toBeNull();
-    expect(store.readPending("../../secrets")).toBeNull();
+  it("refuses a traversal attempt instead of querying for it", async () => {
+    expect(await store.readLedger("uploads", "../../../../etc/passwd")).toBeNull();
+    expect(await store.readLedger("uploads", "not-a-uuid")).toBeNull();
+    expect(await store.readPending("../../secrets")).toBeNull();
+  });
+});
+
+describe("a finding key invented in the browser cannot create a decision", () => {
+  it("refuses a key that is not on the ledger", async () => {
+    const before = (await reread()).audit.length;
+    expect(await store.recordDecision("uploads", ledger.id, "made-up:key", "accepted", "attacker")).toBeNull();
+    // And it wrote nothing on the way out.
+    expect((await reread()).audit.length).toBe(before);
   });
 });

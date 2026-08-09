@@ -24,7 +24,7 @@ export default async function Ledger({params, searchParams}: {
   const {namespace, id} = await params;
   const {supplier} = await searchParams;
   if (namespace !== "demo" && namespace !== "uploads") notFound();
-  const ledger = readLedger(namespace as Namespace, id);
+  const ledger = await readLedger(namespace as Namespace, id);
   if (!ledger) notFound();
 
   const code = ledgerCurrency(ledger);

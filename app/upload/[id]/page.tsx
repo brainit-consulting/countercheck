@@ -15,7 +15,7 @@ const LABELS: Record<Field, {name: string; note: string}> = {
 
 export default async function MapColumns({params}: {params: Promise<{id: string}>}) {
   const {id} = await params;
-  const pending = readPending(id);
+  const pending = await readPending(id);
   if (!pending) notFound();
 
   const records = parseCsvRecords(pending.text);

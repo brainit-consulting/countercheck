@@ -22,14 +22,14 @@ function buildDemoSeed() {
 
 /** The demo ledger is seeded on first view so the app is never empty. */
 export async function ensureDemoLedger(): Promise<Ledger> {
-  const existing = listLedgers("demo");
+  const existing = await listLedgers("demo");
   if (existing.length) return existing[0];
   const seed = buildDemoSeed();
-  return createLedger("demo", seed.name, seed.invoices, seed.findings);
+  return await createLedger("demo", seed.name, seed.invoices, seed.findings);
 }
 
 export async function resetDemoLedger() {
-  const ledger = resetDemo(buildDemoSeed);
+  const ledger = await resetDemo(buildDemoSeed);
   revalidatePath("/");
   revalidatePath(`/review/demo/${ledger.id}`);
   return ledger;
@@ -52,7 +52,7 @@ export async function decide(
     throw new Error("a finding is either accepted, rejected, or reopened");
   }
   const trimmed = typeof reason === "string" ? reason.slice(0, 500) : undefined;
-  const saved = recordDecision(namespace, ledgerId, key, decision, currentUser(), trimmed);
+  const saved = await recordDecision(namespace, ledgerId, key, decision, currentUser(), trimmed);
   if (!saved) throw new Error("that finding is no longer in this ledger");
   revalidatePath(`/review/${namespace}/${ledgerId}`);
   revalidatePath("/");
@@ -71,7 +71,7 @@ export async function stageUpload(_prev: unknown, form: FormData): Promise<{erro
     return {error: `That file is ${(file.size / 1024 / 1024).toFixed(1)} MB. The limit is 25 MB — export a narrower date range.`};
   }
   const text = await file.text();
-  const id = savePending(file.name, text);
+  const id = await savePending(file.name, text);
   redirect(`/upload/${id}`);
 }
 
@@ -86,7 +86,7 @@ export type ImportProblem = {error: string; needsDateOrder?: boolean};
 
 export async function confirmImport(_prev: unknown, form: FormData): Promise<ImportProblem | never> {
   const id = String(form.get("pendingId") ?? "");
-  const pending = id ? readPending(id) : null;
+  const pending = id ? await readPending(id) : null;
   if (!pending) return {error: "That upload has expired. Choose the file again."};
 
   const mapping: Partial<Record<Field, number>> = {};
@@ -127,9 +127,9 @@ export async function confirmImport(_prev: unknown, form: FormData): Promise<Imp
   // cannot reconcile against their own export is worse than no count at all.
   const skipped = new Set(result.errors.map((e) => e.row)).size;
   const name = `${pending.name} — ${result.rows.length.toLocaleString()} rows${skipped ? `, ${skipped} skipped` : ""}`;
-  const ledger = createLedger("uploads", name, result.rows, findings);
+  const ledger = await createLedger("uploads", name, result.rows, findings);
 
-  discardPending(id);
+  await discardPending(id);
   revalidatePath("/");
   redirect(`/review/uploads/${ledger.id}`);
 }

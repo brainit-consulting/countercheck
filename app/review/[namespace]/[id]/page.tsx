@@ -6,7 +6,7 @@ import {FindingCard} from "./finding-card";
 export default async function Review({params}: {params: Promise<{namespace: string; id: string}>}) {
   const {namespace, id} = await params;
   if (namespace !== "demo" && namespace !== "uploads") notFound();
-  const ledger = readLedger(namespace as Namespace, id);
+  const ledger = await readLedger(namespace as Namespace, id);
   if (!ledger) notFound();
 
   const t = totals(ledger);
