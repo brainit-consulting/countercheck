@@ -212,6 +212,32 @@ export async function resetDemo(
   return createLedger("demo", seed.name, seed.invoices, seed.findings);
 }
 
+/**
+ * The name the sample export is stored under.
+ *
+ * Matching on a name is a blunt way to find a row and would be wrong for
+ * anything a person created. It is right here precisely because this ledger is
+ * not a person's: it is a fixture the owner reloads while showing the product,
+ * and it should be replaced rather than accumulated.
+ */
+export const SAMPLE_NAME = "Sample export — Xero-style headers";
+
+/**
+ * Remove previous copies of the sample export. Deliberately narrow.
+ *
+ * This is NOT a general delete path for uploaded ledgers. Countercheck still
+ * has no way to remove one, which is a real gap between what the upload page
+ * promises and what the system does — see PLAN.md, Part 03. Widening this
+ * function into that fix by accident would be the easiest possible mistake, so
+ * it names one string and takes no arguments.
+ */
+export async function removeSampleLedgers(): Promise<void> {
+  await ensureSchema();
+  await sql.query(
+    `delete from ${T.ledgers} where namespace = 'uploads' and name = $1`, [SAMPLE_NAME],
+  );
+}
+
 /* ---------------------------------------------------------------------------
  * Pending uploads
  *

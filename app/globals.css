@@ -1011,3 +1011,14 @@ details > summary:hover { color: var(--ink); }
   justify-content: center;
   min-height: 44px;
 }
+
+/* The owner's demonstration panel.
+ *
+ * Marked as apart from the product rather than styled to blend in. It is
+ * scaffolding for showing Countercheck to someone, and a reader looking over a
+ * shoulder should be able to tell it is not part of what they are being shown. */
+.owner-panel {
+  border-style: dashed;
+  background: transparent;
+}
+.owner-panel h2 { font-size: 1.08rem; }

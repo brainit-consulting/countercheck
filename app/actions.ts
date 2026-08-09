@@ -7,9 +7,12 @@ import {generateLedger} from "../src/demo/generate";
 import {importCsv, FIELDS, type DateOrder, type Field} from "../src/import/csv";
 import {
   createLedger, discardPending, listLedgers, readPending, recordDecision,
-  resetDemo, savePending, type Decision, type Ledger,
+  resetDemo, savePending, removeSampleLedgers, SAMPLE_NAME,
+  type Decision, type Ledger,
 } from "../lib/store";
 import {requireUser} from "../lib/session";
+import {isOwner} from "../lib/owner";
+import {SAMPLE_CSV} from "../src/demo/sample-csv";
 
 /* currentUser now lives in lib/session.ts and reads the signed-in person from
  * the request. The comment that used to sit here said replacing it would be a
@@ -144,6 +147,35 @@ export async function confirmImport(_prev: unknown, form: FormData): Promise<Imp
   const ledger = await createLedger("uploads", name, result.rows, findings);
 
   await discardPending(id);
+  revalidatePath("/");
+  redirect(`/review/uploads/${ledger.id}`);
+}
+
+
+/**
+ * Load the sample export, for showing Countercheck to someone.
+ *
+ * Runs the embedded CSV through the same importCsv and the same rules an
+ * uploaded file goes through — the point of having a second dataset is to show
+ * the real path, and a shortcut that built rows directly would demonstrate
+ * something the product does not actually do.
+ *
+ * Replaces any previous copy rather than accumulating one per demonstration.
+ * That is a reset of this one ledger, not a general delete path: Countercheck
+ * still has no way to remove an uploaded ledger, which is a real gap and is
+ * dealt with in Part 03.
+ */
+export async function loadSampleLedger() {
+  if (!(await isOwner())) throw new Error("not yours to load");
+
+  const result = importCsv(SAMPLE_CSV, {dateOrder: "dmy"});
+  if (result.errors.length) {
+    throw new Error(`the sample export did not import cleanly: ${JSON.stringify(result.errors[0])}`);
+  }
+  const {findings} = detect(result.rows);
+
+  await removeSampleLedgers();
+  const ledger = await createLedger("uploads", SAMPLE_NAME, result.rows, findings);
   revalidatePath("/");
   redirect(`/review/uploads/${ledger.id}`);
 }

@@ -1,5 +1,7 @@
 import {ensureDemoLedger} from "./actions";
-import {ledgerCurrency, listLedgers, totals, type Ledger} from "../lib/store";
+import {ledgerCurrency, listLedgers, totals, SAMPLE_NAME, type Ledger} from "../lib/store";
+import {isOwner} from "../lib/owner";
+import {SampleButton} from "./sample-button";
 import {money, mixed} from "../lib/money";
 import {ResetDemoButton} from "./reset-button";
 
@@ -16,6 +18,8 @@ const fmt = (ledger: Ledger) => {
 export default async function Home() {
   const demo = await ensureDemoLedger();
   const uploads = await listLedgers("uploads");
+  const owner = await isOwner();
+  const sampleLoaded = uploads.some((l) => l.name === SAMPLE_NAME);
   const t = totals(demo);
   const gbp = fmt(demo);
 
@@ -103,6 +107,20 @@ export default async function Home() {
         )}
         <a className="secondary" href="/upload" title="Check your own accounts payable export. You confirm the column mapping; nothing is guessed silently.">Upload a CSV &rarr;</a>
       </section>
+
+      {owner && (
+        <section className="panel owner-panel">
+          <h2>Showing this to someone</h2>
+          <p className="muted small-print">
+            Only you see this. It imports a second synthetic ledger — different
+            suppliers, Xero-style headers — through the real column mapping and
+            the real rules, so there are two datasets to switch between without
+            uploading a file mid-conversation. Six problems are planted in it,
+            and one lookalike that should not be reported.
+          </p>
+          <SampleButton loaded={sampleLoaded} />
+        </section>
+      )}
     </div>
   );
 }
