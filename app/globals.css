@@ -1022,3 +1022,36 @@ details > summary:hover { color: var(--ink); }
   background: transparent;
 }
 .owner-panel h2 { font-size: 1.08rem; }
+
+/* The field table on the upload page.
+ *
+ * A table, not prose, because a person deciding whether their export will work
+ * is scanning for one row — "do I have a bank column?" — not reading. */
+.fields { width: 100%; border-collapse: collapse; margin: 1.1rem 0; font-size: 0.9rem; }
+.fields th[scope="col"] {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  font-weight: 400;
+  padding: 0 0.9rem 0.5rem 0;
+  border-bottom: 1px solid var(--line-strong);
+}
+.fields td { padding: 0.55rem 0.9rem 0.55rem 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+.fields td:nth-child(1) { font-weight: 500; white-space: nowrap; }
+.fields td:nth-child(2) { font-family: var(--font-mono); font-size: 0.78rem; white-space: nowrap; }
+.fields td:nth-child(3) { font-family: var(--font-mono); font-size: 0.82rem; color: var(--ink-muted); white-space: nowrap; }
+.fields td:nth-child(4) { color: var(--ink-soft); }
+
+/* Wide tables scroll inside themselves rather than pushing the page sideways. */
+@media (max-width: 760px) {
+  .fields { display: block; overflow-x: auto; white-space: nowrap; }
+  .fields td:nth-child(4) { white-space: normal; min-width: 22rem; }
+}
+
+/* Two ledgers and a rebuild, on one line. The point of the panel is switching
+ * between datasets mid-conversation, so both destinations are visible at once
+ * rather than one of them being a trip back to the home page. */
+.switcher { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }

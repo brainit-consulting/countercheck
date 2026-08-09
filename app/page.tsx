@@ -118,7 +118,21 @@ export default async function Home() {
             uploading a file mid-conversation. Six problems are planted in it,
             and one lookalike that should not be reported.
           </p>
-          <SampleButton loaded={sampleLoaded} />
+          <div className="switcher">
+            <a className="secondary" href={`/review/demo/${demo.id}`} title="The generated demo ledger — 237 invoices, six findings.">
+              Demo ledger &rarr;
+            </a>
+            {sampleLoaded && (
+              <a
+                className="secondary"
+                href={`/review/uploads/${uploads.find((l) => l.name === SAMPLE_NAME)!.id}`}
+                title="The imported sample export — 218 rows, Xero-style headers, six findings."
+              >
+                Sample export &rarr;
+              </a>
+            )}
+            <SampleButton loaded={sampleLoaded} />
+          </div>
         </section>
       )}
     </div>
