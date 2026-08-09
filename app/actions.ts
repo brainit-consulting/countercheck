@@ -70,6 +70,11 @@ export async function decide(
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
 export async function stageUpload(_prev: unknown, form: FormData): Promise<{error: string} | never> {
+  // Uploading is the act that makes us the holder of someone else's supplier
+  // names, amounts and partial bank details. It requires a person, on the same
+  // reasoning as deciding — and more urgently, because deciding on synthetic
+  // data is harmless and this is not.
+  await requireUser();
   const file = form.get("file");
   if (!(file instanceof File) || file.size === 0) return {error: "Choose a CSV file to check."};
   if (file.size > MAX_UPLOAD_BYTES) {
@@ -90,6 +95,10 @@ export async function stageUpload(_prev: unknown, form: FormData): Promise<{erro
 export type ImportProblem = {error: string; needsDateOrder?: boolean};
 
 export async function confirmImport(_prev: unknown, form: FormData): Promise<ImportProblem | never> {
+  // Gated separately rather than trusting that stageUpload ran first. A pending
+  // id is a UUID in a URL, and "the earlier step checked" is how the check gets
+  // skipped.
+  await requireUser();
   const id = String(form.get("pendingId") ?? "");
   const pending = id ? await readPending(id) : null;
   if (!pending) return {error: "That upload has expired. Choose the file again."};

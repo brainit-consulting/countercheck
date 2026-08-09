@@ -63,7 +63,7 @@ export default async function Home() {
           </div>
         </dl>
 
-        <a className="primary" href={`/review/demo/${demo.id}`}>
+        <a className="primary" href={`/review/demo/${demo.id}`} title="Open the review queue: each finding with the rows behind it, ordered by severity then money at stake.">
           Review {t.open} finding{t.open === 1 ? "" : "s"}{" "}&rarr;
         </a>
         <a className="secondary spaced" href={`/ledger/demo/${demo.id}`}>
@@ -101,7 +101,7 @@ export default async function Home() {
         ) : (
           <p className="muted">No uploads yet.</p>
         )}
-        <a className="secondary" href="/upload">Upload a CSV &rarr;</a>
+        <a className="secondary" href="/upload" title="Check your own accounts payable export. You confirm the column mapping; nothing is guessed silently.">Upload a CSV &rarr;</a>
       </section>
     </div>
   );

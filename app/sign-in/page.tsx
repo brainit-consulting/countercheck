@@ -35,12 +35,18 @@ export default async function SignIn() {
       <section className="panel">{who ? <SignOutButton /> : <SignInForm />}</section>
 
       <section className="panel">
-        <h2>What is kept</h2>
+        <h2>What is kept, and what it is used for</h2>
         <p className="lede">
-          Your email address, and the times you signed in. It is used to attribute
-          decisions and to send you a sign-in link — nothing else, and it is not
-          passed to anyone. Countercheck still cannot pay, void, or alter anything
-          in any system.
+          Your email address, the times you signed in, and your name if you give
+          one. The address signs you in and is what appears beside any decision
+          you record. <strong>Your name is also used by BrainIT Consulting to
+          get in touch with you about Countercheck</strong> — it is optional, and
+          signing in without it works exactly the same.
+        </p>
+        <p className="muted small-print">
+          Nothing here is sold or passed to a third party. Countercheck still
+          cannot pay, void, or alter anything in any system. If you would like
+          your account and its decisions removed, ask and they will be.
         </p>
       </section>
     </div>

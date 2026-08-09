@@ -15,7 +15,8 @@ export function ResetDemoButton() {
 
   if (!armed) {
     return (
-      <button className="ghost" onClick={() => setArmed(true)} disabled={pending}>
+      <button className="ghost" onClick={() => setArmed(true)} disabled={pending}
+        title="Discard every decision recorded on the demo ledger and generate a fresh one. It cannot reach uploaded data.">
         Reset demo data
       </button>
     );
@@ -27,6 +28,7 @@ export function ResetDemoButton() {
       <button
         className="danger"
         disabled={pending}
+        title="Discard the demo decisions and audit trail, and regenerate the ledger. This cannot be undone."
         onClick={() => start(async () => {
           await resetDemoLedger();
           setArmed(false);
@@ -34,7 +36,8 @@ export function ResetDemoButton() {
       >
         {pending ? "Resetting…" : "Yes, reset"}
       </button>
-      <button className="ghost" onClick={() => setArmed(false)} disabled={pending}>
+      <button className="ghost" onClick={() => setArmed(false)} disabled={pending}
+        title="Leave the demo ledger and its decisions as they are.">
         Cancel
       </button>
     </span>

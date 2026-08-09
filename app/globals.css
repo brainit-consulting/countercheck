@@ -70,6 +70,11 @@ a { color: inherit; }
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  /* Wraps rather than squeezes. The signed-in address must always be readable
+     in full, so when the row runs out of width the tools drop to their own
+     line instead of the address losing its domain. */
+  flex-wrap: wrap;
+  row-gap: 0.5rem;
   gap: var(--gap);
   padding: 1.1rem clamp(1rem, 5vw, 3rem);
   border-bottom: 1px solid var(--line-strong);
@@ -96,7 +101,7 @@ a { color: inherit; }
   color: var(--ink-faint);
 }
 
-.masthead-tools { display: flex; align-items: center; gap: 0.7rem; }
+.masthead-tools { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; }
 
 .foot kbd {
   font-family: var(--font-mono);
@@ -938,16 +943,20 @@ details > summary:hover { color: var(--ink); }
   text-decoration: none;
   border-bottom: 1px solid transparent;
   padding: 0.15rem 0;
-  max-width: 22ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  /* HIG's minimum hit area, where the pointer is a finger. */
   display: inline-flex;
   align-items: center;
+  white-space: nowrap;
 }
 .masthead-tools .who:hover,
 .masthead-tools .who:focus-visible { border-bottom-color: currentColor; }
+
+/* An address is shown whole, always.
+ *
+ * It was capped at 22ch with an ellipsis, which cut "dutoit.emile@gmail.com"
+ * one character short. Abbreviating to the local part was the next attempt and
+ * was also wrong: a person needs to see which account they are signed in as,
+ * and the domain is half of that. So it never truncates and never abbreviates —
+ * the masthead wraps instead. */
 @media (hover: none) and (pointer: coarse) {
   .masthead-tools .who { min-height: 44px; }
 }

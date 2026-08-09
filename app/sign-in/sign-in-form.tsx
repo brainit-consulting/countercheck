@@ -16,13 +16,14 @@ const client = createAuthClient({plugins: [magicLinkClient()]});
  */
 export function SignInForm() {
   const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [message, setMessage] = useState("");
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setState("sending");
-    const {error} = await client.signIn.magicLink({email, callbackURL: "/"});
+    const {error} = await client.signIn.magicLink({email, name: name.trim() || undefined, callbackURL: "/"});
     if (error) {
       setState("error");
       setMessage("The link could not be sent just now. Try again in a moment.");
@@ -50,6 +51,20 @@ export function SignInForm() {
   return (
     <form onSubmit={submit} className="upload-form">
       <label className="text-field">
+        <span className="field-label">Your name</span>
+        <input
+          type="text"
+          name="name"
+          autoComplete="name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Alex Morgan"
+          disabled={state === "sending"}
+          title="Shown beside your decisions instead of a bare address, and used by BrainIT to follow up. Optional."
+        />
+      </label>
+
+      <label className="text-field">
         <span className="field-label">Email address</span>
         <input
           type="email"
@@ -66,13 +81,15 @@ export function SignInForm() {
 
       {state === "error" && <p className="form-error" role="alert">{message}</p>}
 
-      <button className="primary" type="submit" disabled={state === "sending" || email.length === 0}>
+      <button className="primary" type="submit" disabled={state === "sending" || email.length === 0}
+        title="Send a one-time sign-in link to this address. It works once and expires in fifteen minutes.">
         {state === "sending" ? "Sending…" : "Email me a link"}
       </button>
 
       <p className="muted small-print">
-        No password. The link is the sign-in, and your email address is what
-        appears next to any decision you record.
+        No password — the link is the sign-in. Your email address is what appears
+        next to any decision you record. Your name is optional, and BrainIT may
+        use it to get in touch about Countercheck.
       </p>
     </form>
   );

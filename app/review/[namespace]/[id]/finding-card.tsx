@@ -111,7 +111,8 @@ export function FindingCard({
             by {finding.decidedBy} on {isoDate(finding.decidedAt!)}
             {finding.reason ? ` — ${finding.reason}` : ""}
           </span>
-          <button className="ghost small" disabled={pending || !signedIn} onClick={() => act(null)}>
+          <button className="ghost small" disabled={pending || !signedIn} onClick={() => act(null)}
+            title={signedIn ? "Clear this decision and return the finding to the open queue. The audit trail keeps both entries." : "Sign in to change a decision."}>
             Reopen
           </button>
         </p>
@@ -124,10 +125,12 @@ export function FindingCard({
             onChange={(e) => setReason(e.target.value)}
             disabled={pending || !signedIn}
           />
-          <button className="decision decision-accept small" disabled={pending || !signedIn} onClick={() => act("accepted")}>
+          <button className="decision decision-accept small" disabled={pending || !signedIn} onClick={() => act("accepted")}
+            title={signedIn ? "Record that this finding is real. Nothing is paid, voided or altered — it is written down against your name." : "Sign in to record a decision. Anyone may read; deciding needs a person."}>
             Confirm — worth chasing
           </button>
-          <button className="decision decision-reject small" disabled={pending || !signedIn} onClick={() => act("rejected")}>
+          <button className="decision decision-reject small" disabled={pending || !signedIn} onClick={() => act("rejected")}
+            title={signedIn ? "Record that this finding is not a problem. It leaves the queue but stays on the ledger with your reason." : "Sign in to record a decision. Anyone may read; deciding needs a person."}>
             Dismiss — it&rsquo;s fine
           </button>
         </div>

@@ -12,6 +12,7 @@ export function SignOutButton() {
       className="secondary"
       type="button"
       disabled={busy}
+      title="End this session. Decisions you have already recorded keep your name against them — signing out does not remove them."
       onClick={async () => {
         setBusy(true);
         await client.signOut();

@@ -1,6 +1,11 @@
 import {UploadForm} from "./upload-form";
+import {currentUser} from "../../lib/session";
 
-export default function Upload() {
+export const dynamic = "force-dynamic";
+
+export default async function Upload() {
+  const who = await currentUser();
+
   return (
     <div className="page">
       <nav className="crumbs">
@@ -18,7 +23,22 @@ export default function Upload() {
       </section>
 
       <section className="panel">
-        <UploadForm />
+        {who ? (
+          <UploadForm />
+        ) : (
+          <div>
+            <h2>Sign in first.</h2>
+            <p className="lede">
+              Reading the demo needs no account. Sending us your own ledger does
+              — a real export carries your suppliers&rsquo; names, what you paid
+              them and part of their bank details, and nobody should be able to
+              put that here anonymously.
+            </p>
+            <p>
+              <a className="primary" href="/sign-in" title="A real export carries supplier names, amounts and part of their bank details. Nobody should be able to put that here anonymously.">Sign in to upload</a>
+            </p>
+          </div>
+        )}
       </section>
 
       <section className="panel">

@@ -15,7 +15,8 @@ export function UploadForm() {
 
       {state?.error && <p className="form-error" role="alert">{state.error}</p>}
 
-      <button className="primary" type="submit" disabled={pending}>
+      <button className="primary" type="submit" disabled={pending}
+        title="Read the column headings only. Nothing is analysed until you confirm which column is which.">
         {pending ? "Reading…" : "Read the columns"}
       </button>
       <p className="muted small-print">

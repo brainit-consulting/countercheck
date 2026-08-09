@@ -137,6 +137,7 @@ export function MappingForm({
         className="primary"
         type="submit"
         disabled={pending || missingRequired.length > 0 || mustAnswerDateOrder}
+        title="Import the rows under the mapping shown above and run the seven rules over them. The uploaded file is discarded at this point."
       >
         {pending ? "Checking…" : "Check these payments"}
       </button>

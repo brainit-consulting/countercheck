@@ -37,7 +37,18 @@ export default async function RootLayout({children}: {children: React.ReactNode}
             <p className="readonly-badge" title="Countercheck cannot pay, void, or alter anything. It only reads what you give it.">
               Read-only
             </p>
-            <a className="who" href="/sign-in" title={who ? "Signed in — decisions are recorded against this address" : "Anyone can read. Deciding needs a person."}>
+            <a
+              className="who"
+              href="/sign-in"
+              title={
+                who
+                  ? `Signed in as ${who} — decisions you record are attributed to this address. Click to sign out.`
+                  : "Anyone can read Countercheck. Recording a decision needs a person. Click to sign in."
+              }
+            >
+              {/* Never truncated and never abbreviated: a person has to be able
+                  to see which account they are signed in as, and the domain is
+                  half of that. The masthead wraps instead. */}
               {who ?? "Sign in"}
             </a>
             <HelpBook />
