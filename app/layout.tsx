@@ -12,13 +12,19 @@ const display = Fraunces({subsets: ["latin"], variable: "--font-fraunces", axes:
 const body = IBM_Plex_Sans({subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-plex-sans"});
 const mono = DM_Mono({subsets: ["latin"], weight: ["400", "500"], variable: "--font-dm-mono"});
 
+import {currentUser} from "../lib/session";
+
 export const metadata: Metadata = {
   title: "Countercheck — spend integrity",
   description:
     "Find duplicate and erroneous payments in an accounts-payable export. Read-only: it never writes back to any system.",
 };
 
-export default function RootLayout({children}: {children: React.ReactNode}) {
+export default async function RootLayout({children}: {children: React.ReactNode}) {
+  // Read once here rather than in every page: the masthead is the one place
+  // that has to say who you are on every screen.
+  const who = await currentUser();
+
   return (
     <html lang="en" className={`${display.variable} ${body.variable} ${mono.variable}`}>
       <body>
@@ -31,6 +37,9 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
             <p className="readonly-badge" title="Countercheck cannot pay, void, or alter anything. It only reads what you give it.">
               Read-only
             </p>
+            <a className="who" href="/sign-in" title={who ? "Signed in — decisions are recorded against this address" : "Anyone can read. Deciding needs a person."}>
+              {who ?? "Sign in"}
+            </a>
             <HelpBook />
           </div>
         </header>

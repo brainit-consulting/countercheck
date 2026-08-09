@@ -9,10 +9,11 @@ import {
   createLedger, discardPending, listLedgers, readPending, recordDecision,
   resetDemo, savePending, type Decision, type Ledger,
 } from "../lib/store";
+import {requireUser} from "../lib/session";
 
-/** Until sign-in is added, decisions are attributed to a single reviewer. Auth
- * replaces this one function, not every call site. */
-const currentUser = () => "demo reviewer";
+/* currentUser now lives in lib/session.ts and reads the signed-in person from
+ * the request. The comment that used to sit here said replacing it would be a
+ * change to one function rather than to every call site. That held. */
 
 function buildDemoSeed() {
   const ledger = generateLedger();
@@ -52,7 +53,11 @@ export async function decide(
     throw new Error("a finding is either accepted, rejected, or reopened");
   }
   const trimmed = typeof reason === "string" ? reason.slice(0, 500) : undefined;
-  const saved = await recordDecision(namespace, ledgerId, key, decision, currentUser(), trimmed);
+  // Deciding is the act this product exists to record, so it requires a person.
+  // An anonymous visitor may read every finding and every row of evidence, and
+  // decide nothing — the alternative is an audit trail that names a constant.
+  const who = await requireUser();
+  const saved = await recordDecision(namespace, ledgerId, key, decision, who, trimmed);
   if (!saved) throw new Error("that finding is no longer in this ledger");
   revalidatePath(`/review/${namespace}/${ledgerId}`);
   revalidatePath("/");

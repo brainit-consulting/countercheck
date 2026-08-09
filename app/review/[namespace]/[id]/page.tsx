@@ -2,11 +2,13 @@ import {notFound} from "next/navigation";
 import {ledgerCurrency, readLedger, totals, type Namespace} from "../../../../lib/store";
 import {money, mixed, isoDate} from "../../../../lib/money";
 import {FindingCard} from "./finding-card";
+import {currentUser} from "../../../../lib/session";
 
 export default async function Review({params}: {params: Promise<{namespace: string; id: string}>}) {
   const {namespace, id} = await params;
   if (namespace !== "demo" && namespace !== "uploads") notFound();
   const ledger = await readLedger(namespace as Namespace, id);
+  const signedIn = (await currentUser()) !== null;
   if (!ledger) notFound();
 
   const t = totals(ledger);
@@ -61,6 +63,7 @@ export default async function Review({params}: {params: Promise<{namespace: stri
               rows={f.invoiceIds.map((i) => invoiceById.get(i)!).filter(Boolean)}
               namespace={namespace as Namespace}
               ledgerId={ledger.id}
+              signedIn={signedIn}
             />
           ))}
         </ol>
@@ -77,6 +80,7 @@ export default async function Review({params}: {params: Promise<{namespace: stri
                 rows={f.invoiceIds.map((i) => invoiceById.get(i)!).filter(Boolean)}
                 namespace={namespace as Namespace}
                 ledgerId={ledger.id}
+                signedIn={signedIn}
               />
             ))}
           </ol>

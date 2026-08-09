@@ -923,3 +923,31 @@ details > summary:hover { color: var(--ink); }
   .audit li { grid-template-columns: 1fr; gap: 0.2rem; }
   .stats { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* Who you are, in the masthead beside the read-only badge.
+ *
+ * Deliberately quiet. It is a statement of fact rather than a call to action:
+ * most visitors are here to read, and reading needs no account. It only asks
+ * for attention when it says "Sign in", and only matters when you try to decide
+ * something — which is the one act that needs a person's name against it. */
+.masthead-tools .who {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft, #5c5a51);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  padding: 0.15rem 0;
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* HIG's minimum hit area, where the pointer is a finger. */
+  display: inline-flex;
+  align-items: center;
+}
+.masthead-tools .who:hover,
+.masthead-tools .who:focus-visible { border-bottom-color: currentColor; }
+@media (hover: none) and (pointer: coarse) {
+  .masthead-tools .who { min-height: 44px; }
+}

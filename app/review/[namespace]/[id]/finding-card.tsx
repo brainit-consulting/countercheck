@@ -43,12 +43,15 @@ const RULES: Record<RuleId, {label: string; check: string}> = {
 };
 
 export function FindingCard({
-  finding, rows, namespace, ledgerId,
+  finding, rows, namespace, ledgerId, signedIn,
 }: {
   finding: ReviewedFinding;
   rows: Invoice[];
   namespace: Namespace;
   ledgerId: string;
+  /** Anonymous visitors read everything and decide nothing. The server refuses
+   * either way; this is so the interface does not offer what it will refuse. */
+  signedIn: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState(finding.reason ?? "");
@@ -108,7 +111,7 @@ export function FindingCard({
             by {finding.decidedBy} on {isoDate(finding.decidedAt!)}
             {finding.reason ? ` — ${finding.reason}` : ""}
           </span>
-          <button className="ghost small" disabled={pending} onClick={() => act(null)}>
+          <button className="ghost small" disabled={pending || !signedIn} onClick={() => act(null)}>
             Reopen
           </button>
         </p>
@@ -119,12 +122,12 @@ export function FindingCard({
             placeholder="Note (optional) — what you found, or why it's fine"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            disabled={pending}
+            disabled={pending || !signedIn}
           />
-          <button className="decision decision-accept small" disabled={pending} onClick={() => act("accepted")}>
+          <button className="decision decision-accept small" disabled={pending || !signedIn} onClick={() => act("accepted")}>
             Confirm — worth chasing
           </button>
-          <button className="decision decision-reject small" disabled={pending} onClick={() => act("rejected")}>
+          <button className="decision decision-reject small" disabled={pending || !signedIn} onClick={() => act("rejected")}>
             Dismiss — it&rsquo;s fine
           </button>
         </div>
