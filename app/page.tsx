@@ -71,7 +71,11 @@ export default async function Home() {
           Review {t.open} finding{t.open === 1 ? "" : "s"}{" "}&rarr;
         </a>
         <a className="secondary spaced" href={`/ledger/demo/${demo.id}`}>
-          Read all {demo.rowCount.toLocaleString()} rows &rarr;
+          {/* The space before "rows" has to be explicit. Written as plain text
+              it vanished and the button read "Read all 237rows" in production;
+              the sibling link above already carries a {" "} for the same reason
+              before its arrow. Found by looking at a frame of the video. */}
+          Read all {demo.rowCount.toLocaleString()}{" "}rows{" "}&rarr;
         </a>
       </section>
 
