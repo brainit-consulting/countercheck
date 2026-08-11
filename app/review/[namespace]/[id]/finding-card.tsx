@@ -159,7 +159,7 @@ export function FindingCard({
         <div className="decide">
           <input
             type="text"
-            placeholder="Note (optional) — what you found, or why it's fine"
+            placeholder="Why — required to dismiss, optional to confirm"
             value={reason}
             onChange={(e) => onReason(e.target.value)}
             disabled={pending || !signedIn}
@@ -169,8 +169,18 @@ export function FindingCard({
             title={signedIn ? "Record that this finding is real. Nothing is paid, voided or altered — it is written down against your name." : "Sign in to record a decision. Anyone may read; deciding needs a person."}>
             Confirm — worth chasing
           </button>
-          <button className="decision decision-reject small" disabled={pending || !signedIn} onClick={() => act("rejected")}
-            title={signedIn ? "Record that this finding is not a problem. It leaves the queue but stays on the ledger with your reason." : "Sign in to record a decision. Anyone may read; deciding needs a person."}>
+          {/* Dismissing needs the sentence. A confirmed finding carries its own
+              reason — the evidence is on the card — but a dismissed one throws
+              the judgement away unless somebody writes it down. The server
+              refuses it too; this only saves the reader a round trip. */}
+          <button className="decision decision-reject small"
+            disabled={pending || !signedIn || !reason.trim()}
+            onClick={() => act("rejected")}
+            title={
+              !signedIn ? "Sign in to record a decision. Anyone may read; deciding needs a person."
+                : !reason.trim() ? "Write why it is fine first. A dismissal with no reason is not a record of anything."
+                  : "Record that this finding is not a problem. It leaves the queue but stays on the ledger with your reason."
+            }>
             Dismiss — it&rsquo;s fine
           </button>
         </div>

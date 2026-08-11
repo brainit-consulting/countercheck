@@ -67,7 +67,27 @@ export async function decide(
   if (decision !== null && decision !== "accepted" && decision !== "rejected") {
     throw new Error("a finding is either accepted, rejected, or reopened");
   }
-  const trimmed = typeof reason === "string" ? reason.slice(0, 500) : undefined;
+  const trimmed = typeof reason === "string" ? reason.trim().slice(0, 500) || undefined : undefined;
+  /**
+   * A dismissal has to say why. Confirming does not.
+   *
+   * DESIGN.md has said so since the first draft — "rejecting opens a required
+   * reason field", and "a rejection without a visible reason is a bug" — while
+   * the manual called the note optional and the code followed the manual. Three
+   * statements of intent, two of them wrong, and the one that shipped was the
+   * weakest.
+   *
+   * The asymmetry is the point. A confirmed finding carries its own reason: the
+   * evidence is on the card. A dismissed one destroys the only record of the
+   * judgement unless somebody writes the sentence down, and "we looked at that
+   * and it was fine" six months later is worth nothing without it.
+   *
+   * Checked here and not only in the form, because a server action is a public
+   * endpoint whether or not a button points at it.
+   */
+  if (decision === "rejected" && !trimmed) {
+    throw new Error("Dismissing a finding needs a reason — write what you found.");
+  }
   // Deciding is the act this product exists to record, so it requires a person.
   // An anonymous visitor may read every finding and every row of evidence, and
   // decide nothing — the alternative is an audit trail that names a constant.

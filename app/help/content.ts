@@ -238,7 +238,7 @@ export const CHAPTERS: Chapter[] = [
       {
         kind: "p",
         text:
-          "The note field is optional and you should use it anyway. Six months from now, the useful part of a dismissed finding is not that it was dismissed — it is why. Write the sentence you would say to an auditor.",
+          "Dismissing a finding requires the note. Confirming does not, because a confirmed finding carries its own reason — the evidence is on the card. Dismissing throws the judgement away unless you write it down, and six months from now the useful part of a dismissed finding is not that it was dismissed, it is why. Write the sentence you would say to an auditor.",
       },
       {kind: "h", text: "The audit trail"},
       {
