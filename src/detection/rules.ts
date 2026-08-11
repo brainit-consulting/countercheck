@@ -1,6 +1,6 @@
 import type {DetectionOptions, Finding, Invoice} from "../types";
 import {
-  daysBetween, isTransposition, onSchedule, scheduleCadence,
+  daysBetween, differsOnlyByBranch, isTransposition, onSchedule, scheduleCadence,
   normaliseBank, normaliseInvoiceNumber, normaliseVendor, vendorSimilarity,
 } from "./match";
 import {money} from "../../lib/money";
@@ -121,8 +121,13 @@ export function vendorSpellingDuplicates(rows: Invoice[], o: DetectionOptions): 
      * instead, which is also how a person would put it.
      */
     const first = sorted[0];
+    // Similar enough to be one company, and not merely the branch next door.
+    // A directional or numbered sister site scores above the threshold — see
+    // differsOnlyByBranch — and is a different supplier, not a misspelling.
     const sameCompany = sorted.filter((r) =>
-      r === first || vendorSimilarity(first.vendorName, r.vendorName) >= o.vendorSimilarity);
+      r === first ||
+      (vendorSimilarity(first.vendorName, r.vendorName) >= o.vendorSimilarity &&
+        !differsOnlyByBranch(first.vendorName, r.vendorName)));
     const spellings = [...new Set(sameCompany.map((r) => r.vendorName))];
     // Identical spelling throughout is the exact rule's job. Anything else that
     // resolves to the same supplier belongs here, including names that differ
@@ -243,7 +248,21 @@ export function roundNumberOutliers(rows: Invoice[], o: DetectionOptions): Findi
   const byVendor = groupBy(payables(rows), (r) => `${normaliseVendor(r.vendorName)}|${cur(r)}`);
   for (const group of byVendor.values()) {
     if (group.length < 4) continue; // not enough history to call anything unusual
-    const round = (n: number) => n >= o.roundNumberThreshold && Number.isInteger(n / 1000);
+    /**
+     * What counts as round.
+     *
+     * This was `n / 1000`, exact thousands only, while the manual and the README
+     * both promised "a round figure above five thousand". £7,500 from a supplier
+     * who bills to the penny is exactly as worth asking about as £8,000, and it
+     * passed unlooked-at — silently, because an absent finding reads as checked
+     * and clean. Raised by the 2026-08-08 review as findings 63 and 64, never
+     * verified by it, and true until 2026-08-11.
+     *
+     * Half-thousands, not hundreds: £7,400 has no pence and is not a round
+     * figure, and a rule that flags it teaches people to ignore the queue.
+     */
+    const ROUND_STEP = 500;
+    const round = (n: number) => n >= o.roundNumberThreshold && Number.isInteger(n / ROUND_STEP);
     const rounds = group.filter((r) => round(r.amount));
     if (!rounds.length) continue;
     // Three or more round-thousand invoices is not an anomaly, it is how this

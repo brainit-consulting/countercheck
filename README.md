@@ -51,7 +51,7 @@ Seven rules, in `src/detection/rules.ts`:
 | `amount-transposition` | An amount that is a digit-swap away from another invoice from the same supplier. |
 | `unapplied-credit` | A credit note that no later payment deducts. |
 | `bank-detail-change` | Payments to a supplier moving to a new account. |
-| `round-number-outlier` | A round figure from a supplier who invoices to the penny. |
+| `round-number-outlier` | A round figure — a multiple of £500 above £5,000 — from a supplier who invoices to the penny. |
 
 The single most important piece of code is not a rule. It is
 `looksLikeRegularSchedule` in `src/detection/match.ts`, which stops a monthly

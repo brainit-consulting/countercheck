@@ -1,5 +1,7 @@
 import {describe, expect, it} from "vitest";
 import {detect} from "../src/detection/engine";
+import {roundNumberOutliers} from "../src/detection/rules";
+import {DEFAULT_OPTIONS} from "../src/types";
 import {generateLedger} from "../src/demo/generate";
 import {daysBetween, isTransposition, looksLikeRegularSchedule, normaliseBank, scheduleCadence, normaliseInvoiceNumber, normaliseVendor, vendorSimilarity} from "../src/detection/match";
 
@@ -308,5 +310,43 @@ describe("result shape", () => {
 
   it("is deterministic", () => {
     expect(detect(generateLedger().rows).summary).toEqual(result.summary);
+  });
+});
+
+/**
+ * Findings 63 and 64 of the 2026-08-08 review, verified true on 2026-08-11.
+ *
+ * The manual and the README both promised "a round figure above five thousand"
+ * while the rule fired only on exact multiples of a thousand. £7,500 from a
+ * supplier who bills to the penny went unlooked-at, and an absent finding reads
+ * as checked and clean. These pin the promise to the behaviour.
+ */
+describe("round-number outliers match what the manual promises", () => {
+  const history = [1234.56, 877.19, 2410.33, 612.4];
+  const withAmount = (odd: number[], test: number) =>
+    [...odd, test].map((amount, i) => ({
+      id: `r${i}`,
+      vendorName: "Pennywise Supplies",
+      invoiceNumber: `INV-${i}`,
+      invoiceDate: `2026-0${(i % 9) + 1}-05`,
+      amount,
+      currency: "GBP",
+    }));
+
+  for (const amount of [5000, 5500, 7500, 8000, 12500]) {
+    it(`flags a ${amount} invoice among penny-precise ones`, () => {
+      const found = roundNumberOutliers(withAmount(history, amount), DEFAULT_OPTIONS);
+      expect(found.map((f) => f.invoiceIds)).toHaveLength(1);
+    });
+  }
+
+  it("leaves an amount that merely has no pence alone", () => {
+    // 7,403.00 is not a round figure. A rule that flags it teaches people to
+    // stop reading the queue, which costs more than the miss.
+    expect(roundNumberOutliers(withAmount(history, 7403), DEFAULT_OPTIONS)).toHaveLength(0);
+  });
+
+  it("stays below the floor", () => {
+    expect(roundNumberOutliers(withAmount(history, 4500), DEFAULT_OPTIONS)).toHaveLength(0);
   });
 });

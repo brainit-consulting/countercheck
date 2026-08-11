@@ -188,7 +188,7 @@ export const CHAPTERS: Chapter[] = [
           ],
           [
             "Unusually round amount",
-            "A round figure above five thousand from a supplier who normally invoices to the penny.",
+            "A round figure above five thousand — a multiple of five hundred — from a supplier who normally invoices to the penny.",
             "Often. This rule is low severity because it is a prompt, not an accusation. It stays quiet for suppliers who always bill round numbers.",
           ],
         ],

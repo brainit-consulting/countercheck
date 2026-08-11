@@ -93,6 +93,50 @@ export function isTransposition(a: number, b: number): boolean {
   return x[i] === y[j] && x[j] === y[i];
 }
 
+/**
+ * Words that mean "a different one of these", not "a typo of this".
+ *
+ * Two supplier records reading *Rookwood Cleaning North* and *Rookwood Cleaning
+ * South* score 0.913, well over the 0.86 the spelling rule merges at. They are
+ * not one company spelled two ways. They are two sites, and reporting their
+ * invoices as one company paid twice is an accusation about somebody's
+ * paperwork that happens to be false.
+ *
+ * A typo makes a name nearly the same by accident. These tokens make it nearly
+ * the same on purpose, and the nearness is the whole problem: the more
+ * carefully a company names its branches, the more alike they look.
+ *
+ * Raised by the 2026-08-08 review as finding 20, never verified by it, and
+ * still true when it was finally executed on 2026-08-11.
+ */
+const CONTRASTIVE = new Set([
+  "north", "south", "east", "west", "northern", "southern", "eastern", "western",
+  "northeast", "northwest", "southeast", "southwest", "central", "upper", "lower",
+  "inner", "outer", "first", "second", "third", "fourth", "fifth",
+  "one", "two", "three", "four", "five", "ii", "iii", "iv",
+]);
+
+const isContrastive = (token: string) => CONTRASTIVE.has(token) || /^\d+$/.test(token);
+
+/**
+ * True when the only thing separating two supplier names is a token naming a
+ * different branch, site or number.
+ *
+ * Deliberately one-sided: it refuses the merge whenever the whole difference is
+ * contrastive, including when one name simply carries an extra number ("Acme"
+ * against "Acme 2"). Missing a real duplicate costs a finding nobody sees.
+ * Inventing one costs a supplier being told they were paid twice when they were
+ * not, and those two costs are not the same size.
+ */
+export function differsOnlyByBranch(a: string, b: string): boolean {
+  const left = new Set(normaliseVendor(a).split(" ").filter(Boolean));
+  const right = new Set(normaliseVendor(b).split(" ").filter(Boolean));
+  const onlyLeft = [...left].filter((w) => !right.has(w));
+  const onlyRight = [...right].filter((w) => !left.has(w));
+  if (!onlyLeft.length && !onlyRight.length) return false;  // identical — the exact rule's job
+  return [...onlyLeft, ...onlyRight].every(isContrastive);
+}
+
 /** Last four digits, however the export chose to render them. */
 export const normaliseBank = (s: string | undefined) =>
   (s ?? "").replace(/\D/g, "").slice(-4).padStart(4, "0");
