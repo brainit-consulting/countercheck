@@ -41,7 +41,7 @@ export default async function Home() {
             <h2>Demo ledger</h2>
             <p className="muted">
               {demo.rowCount.toLocaleString()}{" "}
-              invoices, twelve months, generated. Nobody&rsquo;s real data — but the
+              invoices, eleven months, generated. Nobody&rsquo;s real data — but the
               problems in it are the real ones.
             </p>
           </div>

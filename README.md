@@ -35,7 +35,7 @@ npm run dev
 | `OWNER_EMAILS` | one demo button | Comma-separated; gates nothing else |
 
 Open <http://localhost:3000>. The demo ledger seeds itself on first view: 237
-invoices over twelve months with six planted problems, generated from a fixed
+invoices over eleven months with six planted problems, generated from a fixed
 seed so it is the same every time. **Reading the demo needs no account.** Signing
 in is only required to record a decision or to upload your own export.
 
@@ -99,9 +99,11 @@ reset that can one day be pointed at the wrong one.
 npm test
 ```
 
-Three files, and `npm test` prints the count — this README said 109 when there
-were 154, then said 154 when there were 155. A number that is copied here has to
-be maintained here, and it has not been, twice.
+`npm test` prints the count. This README said 109 tests when there were 154,
+then 154 when there were 155, and "three files" when there were five — the file
+count drifted within a day of the test count being removed for exactly this
+reason. A number copied into a document has to be maintained there, and it is
+not.
 
 `test/store.test.ts` needs `DATABASE_URL` and runs against a real Postgres in a
 throwaway schema named after the process id. A fake one would not have caught

@@ -318,12 +318,19 @@ button:disabled { opacity: 0.55; cursor: progress; }
 .sev.sev-medium { background: var(--severity-medium-bg); color: var(--severity-medium); }
 .sev.sev-low { background: var(--severity-low-bg); color: var(--severity-low); }
 
+/* The amount is a figure, not a verdict.
+ *
+ * This was --severity-high on every card, so a low-severity round-number
+ * question rendered its value in the same alarm red as money already out of the
+ * door. DESIGN.md asks for --ink here in so many words, and brand.css calls
+ * --ink "all figures, all body text". Severity is carried by the badge, which
+ * is the one element on the card whose job it is. */
 .stake {
   margin: 0;
   font-family: var(--font-mono);
   font-size: 1.18rem;
   font-variant-numeric: tabular-nums;
-  color: var(--severity-high);
+  color: var(--ink);
 }
 
 .explanation { max-width: var(--measure-prose); margin: 0.6rem 0 0.8rem; color: var(--ink-muted); }

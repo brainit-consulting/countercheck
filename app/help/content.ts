@@ -83,7 +83,7 @@ export const CHAPTERS: Chapter[] = [
       {
         kind: "steps",
         items: [
-          "On the front page, look at the demo ledger panel. It holds 237 invoices across twelve months from twenty suppliers.",
+          "On the front page, look at the demo ledger panel. It holds 237 invoices across eleven months from twenty suppliers.",
           "Press Review findings. You will land in the review queue with six open findings and roughly £27,400 at stake.",
           "Open the first finding's evidence. You are looking at the actual invoice rows, exactly as they appear in the ledger.",
           "Read the How to settle it note underneath. That is the sentence that tells you who to ask and what will prove it either way.",
