@@ -959,7 +959,7 @@ details > summary:hover { color: var(--ink); }
 
 /* An address is shown whole, always.
  *
- * It was capped at 22ch with an ellipsis, which cut "dutoit.emile@gmail.com"
+ * It was capped at 22ch with an ellipsis, which cut a real 22-character address
  * one character short. Abbreviating to the local part was the next attempt and
  * was also wrong: a person needs to see which account they are signed in as,
  * and the domain is half of that. So it never truncates and never abbreviates —
