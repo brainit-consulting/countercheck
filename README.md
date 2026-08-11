@@ -8,13 +8,36 @@ settle it.
 It never connects to a finance system and has no write path back to one. Every
 finding is a question for a person, not a decision.
 
+Running at <https://countercheck-brainit.vercel.app> — the demo ledger is
+readable without an account.
+
+It is built in public as BrainIT **Master Build No. 1**, a series that takes one
+real application from an idea to a system you own, mistakes included:
+<https://guides.brainitconsulting.com/>
+
+## Running it
+
+It needs a Postgres database. Any will do — it creates its own tables on first
+use — and Neon's free tier is what this runs on.
+
 ```bash
-npm install && npm run dev
+npm install
+cp .env.example .env.local     # then fill in the two required values
+npm run dev
 ```
+
+| Variable | Needed for | Notes |
+| --- | --- | --- |
+| `DATABASE_URL` | starting at all | Any Postgres connection string |
+| `BETTER_AUTH_SECRET` | starting at all | Any long random string |
+| `RESEND_API_KEY` | signing in | Only when a magic link is actually sent |
+| `SENDER_EMAIL` | signing in | A verified sender on your Resend domain |
+| `OWNER_EMAILS` | one demo button | Comma-separated; gates nothing else |
 
 Open <http://localhost:3000>. The demo ledger seeds itself on first view: 237
 invoices over twelve months with six planted problems, generated from a fixed
-seed so it is the same every time.
+seed so it is the same every time. **Reading the demo needs no account.** Signing
+in is only required to record a decision or to upload your own export.
 
 ## What it looks for
 
@@ -48,18 +71,27 @@ board pack.
 
 ## Storage
 
-Ledgers, decisions and the audit trail are JSON files under `.data/`, behind the
-narrow interface in `lib/store.ts`. That is deliberate for an MVP you can clone
-and run in one command with no database and no environment variables.
+Postgres, through `@neondatabase/serverless`, behind the narrow interface in
+`lib/store.ts`. Four tables in a `countercheck` schema — ledgers, decisions,
+audit, pending uploads — created on first use. Better Auth owns four more in
+`public`.
 
-It is also the thing to replace first for a real deployment: a serverless host
-has an ephemeral filesystem, so decisions would not survive. Swapping in Postgres
-is a change to `lib/store.ts` alone — no screen reads or writes data any other
-way.
+A decision is a row, so reopening one deletes that row rather than editing it.
+The audit table is append-only in the strongest sense available: nothing in the
+codebase updates or deletes from it, so a corrected decision adds a line and the
+line before it stays exactly as written.
 
-`.data/demo/` and `.data/uploads/` are separate namespaces, and the demo reset
-takes no namespace argument on purpose: a reset that can be pointed at a
-namespace is a reset that can one day be pointed at the wrong one.
+**It used to be JSON files under `.data/`,** one per ledger, and that is worth
+knowing rather than hiding. It ran fine on a laptop and returned an error the
+moment it was deployed, because a serverless host will not let a program keep
+files. The one-line fix — point it at temporary space — was available and was
+not taken: that version works and quietly loses decisions, in a product whose
+only claim is that a person decided and it was written down. `git log lib/store.ts`
+has both.
+
+`demo` and `uploads` remain separate namespaces, and the demo reset takes no
+namespace argument on purpose: a reset that can be pointed at a namespace is a
+reset that can one day be pointed at the wrong one.
 
 ## Tests
 
@@ -67,7 +99,15 @@ namespace is a reset that can one day be pointed at the wrong one.
 npm test
 ```
 
-154 tests. The one to read first is the precision test in `test/engine.test.ts`,
+Three files, and `npm test` prints the count — this README said 109 when there
+were 154, then said 154 when there were 155. A number that is copied here has to
+be maintained here, and it has not been, twice.
+
+`test/store.test.ts` needs `DATABASE_URL` and runs against a real Postgres in a
+throwaway schema named after the process id. A fake one would not have caught
+the things this suite exists to catch.
+
+The one to read first is the precision test in `test/engine.test.ts`,
 which asserts the demo ledger produces exactly the planted findings and nothing
 else. It was added after a demo run reported eleven findings for six problems —
 green tests said the rules worked; the report said they were unusable.

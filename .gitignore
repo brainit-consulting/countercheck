@@ -14,4 +14,7 @@ next-env.d.ts
 .claude/
 skills-lock.json
 
-.env*
+# The template is the one env file that must be tracked. The README tells a
+# reader to copy it, and a README naming a file that is not there is worse than
+# no instruction at all. It contains no real value.
+!.env.example
