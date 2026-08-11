@@ -117,3 +117,12 @@ green tests said the rules worked; the report said they were unusable.
 `DESIGN.md` carries the visual reasoning and the verified contrast tables.
 `app/brand.css` holds the tokens; `app/globals.css` is structure only and never
 names a raw colour.
+
+## Licence
+
+MIT — see `LICENSE`. Copy it, change it, run it, sell it. A Master Build that a
+reader cannot legally reuse is a demonstration rather than a build, and "all
+rights reserved" is what a repository says by default when nobody chooses.
+
+Copyright is held by Blueridge Web Services LLC, the Florida company that
+BrainIT Consulting trades under.

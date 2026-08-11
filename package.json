@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Read-only spend integrity. Detects duplicate and erroneous payments in an AP export, with evidence a person can act on.",
+  "license": "MIT",
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",

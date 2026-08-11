@@ -11,7 +11,7 @@ import {
   type Decision, type Ledger,
 } from "../lib/store";
 import {requireUser} from "../lib/session";
-import {isOwner} from "../lib/owner";
+import {isOwner, requireOwner} from "../lib/owner";
 import {SAMPLE_CSV} from "../src/demo/sample-csv";
 
 /* currentUser now lives in lib/session.ts and reads the signed-in person from
@@ -32,7 +32,19 @@ export async function ensureDemoLedger(): Promise<Ledger> {
   return await createLedger("demo", seed.name, seed.invoices, seed.findings);
 }
 
+/**
+ * Reset destroys every decision on the demo ledger and the audit trail with
+ * them, and it had no check on it at all — an anonymous visitor could call it.
+ * The comment thirty lines below says a server action is a public HTTP endpoint
+ * whose arguments must be checked rather than trusted because the UI only
+ * offers three buttons. The same sentence applies to whether it may be called,
+ * and this one was not held to it.
+ *
+ * Found on 2026-08-11 while checking that nothing in Part 02 lied. Nothing did;
+ * this was underneath.
+ */
 export async function resetDemoLedger() {
+  await requireOwner();
   const ledger = await resetDemo(buildDemoSeed);
   revalidatePath("/");
   revalidatePath(`/review/demo/${ledger.id}`);

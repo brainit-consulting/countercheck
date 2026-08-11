@@ -45,7 +45,11 @@ export default async function Home() {
               problems in it are the real ones.
             </p>
           </div>
-          <ResetDemoButton />
+          {/* Hidden from everyone else, and gated again in the action itself.
+              Hiding a control is presentation; the check that matters is on the
+              server, because a server action is reachable whether or not
+              anything on screen points at it. */}
+          {owner ? <ResetDemoButton /> : null}
         </div>
 
         <dl className="stats">
