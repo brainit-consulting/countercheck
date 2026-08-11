@@ -107,10 +107,13 @@ export default async function Upload() {
       <section className="panel">
         <h2>What happens to the file</h2>
         <p className="lede">
-          It is read on this machine, held only until you confirm the mapping, and
-          then discarded — what is kept is the parsed rows and the findings. Nothing
-          is sent anywhere, and Countercheck has no write path back to any finance
-          system. If a finding is real, a person acts on it.
+          It is uploaded to this application&rsquo;s own server and held in its
+          database until you confirm the mapping, then deleted — and swept after
+          six hours if you never confirm. What is kept is the parsed rows and the
+          findings, and there is not yet a way for you to delete those yourself.
+          It goes nowhere else: no third party sees it, nothing is sent to a
+          model, and Countercheck has no write path back to any finance system.
+          If a finding is real, a person acts on it.
         </p>
       </section>
     </div>

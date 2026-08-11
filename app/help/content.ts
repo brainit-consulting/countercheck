@@ -250,7 +250,7 @@ export const CHAPTERS: Chapter[] = [
         kind: "note",
         title: "Who decided",
         text:
-          "Sign-in has not been built yet, so every decision is attributed to \"demo reviewer\". The audit trail already carries the field; adding real accounts fills it in and changes nothing else.",
+          "The name beside a decision is the email address of the person signed in when it was made. Decisions taken before sign-in existed say \"demo reviewer\" instead — a fixed piece of text that every decision was recorded against. Those lines are still there, because an audit trail that is rewritten to look better is not an audit trail.",
       },
     ],
   },
@@ -354,34 +354,35 @@ export const CHAPTERS: Chapter[] = [
       {
         kind: "p",
         text:
-          "Countercheck stores ledgers, decisions and audit trails as ordinary files in a folder called .data next to the application. No database, no accounts, no configuration.",
+          "Countercheck keeps ledgers, decisions and audit trails in a Postgres database. Everything the application itself stores lives in four tables in a schema called countercheck; sign-in is a separate library and owns four more.",
       },
       {
         kind: "table",
-        head: ["Path", "What is in it"],
+        head: ["Table", "What is in it"],
         rows: [
-          [".data/demo/", "The generated demo ledger. Safe to delete; it regenerates."],
-          [".data/uploads/", "Ledgers imported from your own files, with every decision and the audit trail."],
-          [".data/pending/", "An uploaded CSV waiting for you to confirm its columns. Deleted the moment you do."],
+          ["ledgers", "The demo ledger, and any export you have imported: the parsed rows and the findings over them."],
+          ["decisions", "One row per decided finding, with the address of the person who decided it. Reopening deletes the row."],
+          ["audit", "Every decision and every reopening, in order. Nothing in the codebase updates or deletes from this table."],
+          ["pending_uploads", "A CSV waiting for you to confirm its columns. Deleted when you confirm, and swept after six hours if you never do."],
         ],
       },
       {kind: "h", text: "The network"},
       {
         kind: "p",
         text:
-          "The application makes no outbound requests. Fonts are bundled at build time rather than fetched. Nothing is sent to an analytics service, an error tracker or a model provider, because none of those are wired in.",
+          "Two outbound destinations, and no others: the database, and the email provider that sends your sign-in link. Fonts are bundled at build time rather than fetched. Nothing is sent to an analytics service, an error tracker or a model provider, because none of those are wired in.",
       },
       {kind: "h", text: "Deleting everything"},
       {
         kind: "p",
         text:
-          "Delete the .data folder. That is the whole retention story. There is no second copy, no cache and no remote backup, which is a real limitation as much as a privacy property — if you want the decisions kept, back that folder up yourself.",
+          "There is no button for this, and that is a gap rather than a policy. Resetting the demo clears the demo ledger and nothing else. An export you have imported stays until someone with database access removes it, which on the hosted version is us and not you.",
       },
       {
         kind: "note",
-        title: "If you deploy this to a server",
+        title: "What this page used to say",
         text:
-          "Serverless hosts have a temporary filesystem, so decisions made on one request may not exist on the next. Storage is deliberately behind a single narrow file so it can be swapped for a database, but until it is, run this locally or on a machine with a real disk.",
+          "Until the storage moved, this chapter said the data was ordinary files in a .data folder, that the application made no outbound requests, and that deleting the folder was the whole retention story. All three had stopped being true and the chapter had not been rewritten. A statement about where someone's finance data goes is not documentation that can be left to catch up later.",
       },
     ],
   },
