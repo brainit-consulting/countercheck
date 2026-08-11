@@ -397,10 +397,13 @@ export const CHAPTERS: Chapter[] = [
         kind: "keys",
         rows: [
           ["?", "Open the manual from anywhere"],
-          ["Esc", "Close it"],
-          ["Drag the title bar", "Move it out of your way"],
-          ["Drag the bottom-right corner", "Resize it"],
-          ["Double-click the title bar", "Snap back to the middle at full size"],
+          ["Esc", "Close it, when the manual has focus"],
+          ["Arrow keys", "Move it out of your way"],
+          ["Shift + arrows", "Resize it"],
+          ["Home", "Snap back to the middle at full size"],
+          ["Drag the title bar", "The same, with a pointer"],
+          ["Drag the bottom-right corner", "Resize with a pointer"],
+          ["Double-click the title bar", "Recentre with a pointer"],
         ],
       },
       {
