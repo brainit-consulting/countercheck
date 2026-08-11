@@ -55,7 +55,22 @@ export function MappingForm({
         <tbody>
           {fields.map((field) => {
             const guess = mapping[field];
-            const shaky = guess.column !== null && guess.confidence < SHAKY;
+            /**
+             * Whose column is on screen decides what the reason column may say.
+             *
+             * This read `mapping[field]` and nothing else, so overriding the
+             * Amount dropdown from "Net Amount" to "Gross Amount" left the row
+             * still asserting 96% confidence and still explaining a column the
+             * reader had just rejected. The screen was arguing with the person
+             * using it. The red "shaky" highlight was wrong in both directions
+             * for the same reason.
+             *
+             * Once a person has chosen, the guess is history: the software has
+             * no confidence in their choice to report, and saying so plainly is
+             * better than inheriting a number that was about something else.
+             */
+            const overridden = String(guess.column ?? "") !== chosen[field];
+            const shaky = !overridden && guess.column !== null && guess.confidence < SHAKY;
             return (
               <tr key={field} className={shaky ? "shaky" : undefined}>
                 <th scope="row">
@@ -76,14 +91,18 @@ export function MappingForm({
                   </select>
                 </td>
                 <td className="muted reason">
-                  {guess.column === null ? guess.reason : (
-                    <>
-                      <span className={`confidence${shaky ? " low" : ""}`}>
-                        {Math.round(guess.confidence * 100)}%
-                      </span>{" "}
-                      {guess.reason}
-                    </>
-                  )}
+                  {overridden
+                    ? (chosen[field] === ""
+                      ? "You set this to not in this file."
+                      : `You chose "${headers[Number(chosen[field])] || `column ${Number(chosen[field]) + 1}`}" for this.`)
+                    : guess.column === null ? guess.reason : (
+                      <>
+                        <span className={`confidence${shaky ? " low" : ""}`}>
+                          {Math.round(guess.confidence * 100)}%
+                        </span>{" "}
+                        {guess.reason}
+                      </>
+                    )}
                 </td>
               </tr>
             );
