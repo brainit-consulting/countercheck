@@ -140,7 +140,7 @@ export function vendorSpellingDuplicates(rows: Invoice[], o: DetectionOptions): 
       severity: "high",
       amountAtStake: first.amount * extra,
       invoiceIds: sameCompany.map((r) => r.id),
-      explanation: `Invoice ${first.invoiceNumber} for ${money(first.amount, first.currency)} was paid ${sameCompany.length} times, to supplier records that look like the same company: ${spellings.map((s) => `"${s}"`).join(", ")}.`,
+      explanation: `Invoice ${first.invoiceNumber} for ${money(first.amount, first.currency)} appears ${sameCompany.length} times, against supplier records that look like the same company: ${spellings.map((s) => `"${s}"`).join(", ")}.`,
     });
   }
   return out;
