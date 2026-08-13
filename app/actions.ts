@@ -21,7 +21,13 @@ import {SAMPLE_CSV} from "../src/demo/sample-csv";
 function buildDemoSeed() {
   const ledger = generateLedger();
   const {findings} = detect(ledger.rows);
-  return {name: "Demo ledger — 12 months of accounts payable", invoices: ledger.rows, findings};
+  /* Eleven, not twelve. The generated span is 336 days, and everywhere else
+     that says so — the home page and the manual — was corrected to eleven when
+     finding 55 was worked through. This string was missed because it is stored
+     on the ledger row at seed time rather than rendered from the data, so it
+     only shows on screens that read the ledger's name. It was found in a video
+     capture of the review queue, not by reading the code. */
+  return {name: "Demo ledger — eleven months of accounts payable", invoices: ledger.rows, findings};
 }
 
 /** The demo ledger is seeded on first view so the app is never empty. */
