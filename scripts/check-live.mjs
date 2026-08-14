@@ -149,12 +149,27 @@ check(
   `${exposed.status} for a real ledger, ${missing.status} for one that does not exist`,
 );
 
-/** The retention wording Part 03 puts on screen while saying it aloud. */
+/**
+ * The retention wording, which changed when the delete button was built.
+ *
+ * Part 03 filmed this page saying there was not yet a way to delete, and that
+ * was true when it was filmed. Part 04 built the button, so the assertion moves
+ * with the product rather than pinning it to a sentence in an old video.
+ */
 const upload = await get("/upload");
 check(
-  "the upload page still says what is kept and that you cannot delete it",
-  /What is kept is the parsed rows and the findings/i.test(upload) && /not yet a way for you to delete/i.test(upload),
-  "Part 03 says this sentence is on the page. If it has gone, the video is now wrong.",
+  "the upload page says what is kept",
+  /What is kept is the parsed rows and the findings/i.test(upload),
+);
+check(
+  "and names the button that removes it",
+  /Delete this ledger/i.test(upload) && /Nothing is kept/i.test(upload),
+  "the page must describe the delete path now that one exists",
+);
+check(
+  "and no longer claims deletion is impossible",
+  !/not yet a way for you to delete/i.test(upload),
+  "the old sentence is still there and is now false",
 );
 
 console.log("");
