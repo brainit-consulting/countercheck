@@ -4,11 +4,13 @@ import {money, mixed, isoDate} from "../../../../lib/money";
 import {FindingCard} from "./finding-card";
 import {currentUser} from "../../../../lib/session";
 import {currentViewer} from "../../../../lib/owner";
+import {DeleteLedgerButton} from "../../../delete-ledger-button";
 
 export default async function Review({params}: {params: Promise<{namespace: string; id: string}>}) {
   const {namespace, id} = await params;
   if (namespace !== "demo" && namespace !== "uploads") notFound();
-  const ledger = await readLedger(namespace as Namespace, id, await currentViewer());
+  const viewer = await currentViewer();
+  const ledger = await readLedger(namespace as Namespace, id, viewer);
   const signedIn = (await currentUser()) !== null;
   if (!ledger) notFound();
 
@@ -46,6 +48,15 @@ export default async function Review({params}: {params: Promise<{namespace: stri
           <div><dt>Confirmed</dt><dd className="figure accepted">{t.accepted ? gbp(t.acceptedValue) : "—"}</dd></div>
           <div><dt>Dismissed</dt><dd className="figure muted">{t.rejected || "—"}</dd></div>
         </dl>
+        {/* Only on your own upload, and never on the demo, which belongs to
+            nobody. Part 03 published the promise that this did not exist; Part
+            04 is where it does. */}
+        {namespace === "uploads" && viewer.email && ledger.ownerEmail
+          && ledger.ownerEmail.toLowerCase() === viewer.email.toLowerCase() ? (
+          <p className="delete-row">
+            <DeleteLedgerButton id={ledger.id} rowCount={ledger.rowCount} />
+          </p>
+        ) : null}
       </section>
 
       {open.length === 0 ? (

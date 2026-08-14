@@ -360,7 +360,7 @@ export const CHAPTERS: Chapter[] = [
         kind: "table",
         head: ["Table", "What is in it"],
         rows: [
-          ["ledgers", "The demo ledger, and any export you have imported: the parsed rows and the findings over them."],
+          ["ledgers", "The demo ledger, and any export you have imported: the parsed rows and the findings over them. An imported ledger records the address that imported it, and only that address can open it."],
           ["decisions", "One row per decided finding, with the address of the person who decided it. Reopening deletes the row."],
           ["audit", "Every decision and every reopening, in order. Nothing in the codebase updates or deletes from this table."],
           ["pending_uploads", "A CSV waiting for you to confirm its columns. Deleted when you confirm, and swept after six hours if you never do."],
@@ -376,7 +376,7 @@ export const CHAPTERS: Chapter[] = [
       {
         kind: "p",
         text:
-          "There is no button for this, and that is a gap rather than a policy. Resetting the demo clears the demo ledger and nothing else. An export you have imported stays until someone with database access removes it, which on the hosted version is us and not you.",
+          "Open the review queue for a ledger you imported and press Delete this ledger. It removes the parsed rows, the findings, every decision recorded on them and the audit trail, and it keeps no copy. Only you can do it: the person who runs this instance can read your ledger to help you and cannot delete it, because a deletion by anyone else would leave nothing behind to check.",
       },
       {
         kind: "note",

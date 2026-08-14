@@ -6,7 +6,7 @@ import {detect} from "../src/detection/engine";
 import {generateLedger} from "../src/demo/generate";
 import {importCsv, FIELDS, type DateOrder, type Field} from "../src/import/csv";
 import {
-  createLedger, discardPending, listLedgers, readPending, recordDecision,
+  createLedger, deleteUploadedLedger, discardPending, listLedgers, readPending, recordDecision,
   resetDemo, savePending, removeSampleLedgers, SAMPLE_NAME, ANONYMOUS,
   type Decision, type Ledger,
 } from "../lib/store";
@@ -202,9 +202,8 @@ export async function confirmImport(_prev: unknown, form: FormData): Promise<Imp
  * something the product does not actually do.
  *
  * Replaces any previous copy rather than accumulating one per demonstration.
- * That is a reset of this one ledger, not a general delete path: Countercheck
- * still has no way to remove an uploaded ledger, which is a real gap and is
- * dealt with in Part 03.
+ * That is a reset of this one ledger, not a general delete path. The general
+ * one is `deleteMyLedger` below, added in Part 04.
  */
 export async function loadSampleLedger() {
   /* requireOwner rather than isOwner: it returns the address, which the sample
@@ -221,4 +220,27 @@ export async function loadSampleLedger() {
   const ledger = await createLedger("uploads", SAMPLE_NAME, result.rows, findings, owner);
   revalidatePath("/");
   redirect(`/review/uploads/${ledger.id}`);
+}
+
+/**
+ * Delete your own uploaded ledger.
+ *
+ * Part 03 said, in a published video and on a public page, that the rows are
+ * kept and no button removes them. This is that button.
+ *
+ * The check is ownership, not sign-in. A session says a person came back; it
+ * does not say the data is theirs. `deleteUploadedLedger` matches the ledger's
+ * recorded owner against the address in the session and deletes nothing when
+ * they differ — the same query does the finding and the deciding, so there is no
+ * gap between checking and acting.
+ *
+ * It refuses without a reason, and deliberately: telling a caller "that exists
+ * but is not yours" tells them it exists.
+ */
+export async function deleteMyLedger(id: string) {
+  const who = await requireUser();
+  const gone = await deleteUploadedLedger(id, {email: who, isInstanceOwner: false});
+  if (!gone) throw new Error("That ledger is not there.");
+  revalidatePath("/");
+  redirect("/?deleted=1");
 }

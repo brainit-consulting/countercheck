@@ -229,3 +229,75 @@ describe("an uploaded ledger belongs to the address that uploaded it", () => {
       .rejects.toThrow(/belongs to nobody/);
   });
 });
+
+/**
+ * The delete Part 03 promised in public and Part 04 built.
+ *
+ * Only the person whose ledger it is. Not the instance owner, who can read it —
+ * reading someone's data to help them and destroying it are different powers,
+ * and the second leaves nothing behind to check, because the audit rows go with
+ * the ledger.
+ */
+describe("you can delete your own uploaded ledger, and only your own", () => {
+  const fresh = async (owner = OWNER.email!) => {
+    const rows = generateLedger().rows;
+    return store.createLedger("uploads", "to delete", rows, detect(rows).findings, owner);
+  };
+
+  it("refuses an anonymous caller", async () => {
+    const l = await fresh();
+    expect(await store.deleteUploadedLedger(l.id, store.ANONYMOUS)).toBe(false);
+    expect((await store.readLedger("uploads", l.id, OWNER))?.id).toBe(l.id);
+  });
+
+  it("refuses a different signed-in person", async () => {
+    const l = await fresh();
+    expect(await store.deleteUploadedLedger(l.id, STRANGER)).toBe(false);
+    expect((await store.readLedger("uploads", l.id, OWNER))?.id).toBe(l.id);
+  });
+
+  it("refuses the owner of the instance, who may read it", async () => {
+    const l = await fresh();
+    const instanceOwner = {email: "runs-the-box@example.test", isInstanceOwner: true};
+    expect((await store.readLedger("uploads", l.id, instanceOwner))?.id).toBe(l.id);
+    expect(await store.deleteUploadedLedger(l.id, instanceOwner)).toBe(false);
+  });
+
+  it("deletes it for the person who uploaded it", async () => {
+    const l = await fresh();
+    expect(await store.deleteUploadedLedger(l.id, OWNER)).toBe(true);
+    expect(await store.readLedger("uploads", l.id, OWNER)).toBeNull();
+  });
+
+  it("takes the decisions and the audit trail with it", async () => {
+    const l = await fresh();
+    const key = l.findings[0].key;
+    await store.recordDecision("uploads", l.id, key, "accepted", OWNER.email!);
+    expect((await store.readLedger("uploads", l.id, OWNER))?.audit.length).toBeGreaterThan(1);
+
+    expect(await store.deleteUploadedLedger(l.id, OWNER)).toBe(true);
+
+    const decisions = await db.sql.query(`select 1 from ${db.T.decisions} where ledger_id = $1`, [l.id]);
+    const audit = await db.sql.query(`select 1 from ${db.T.audit} where ledger_id = $1`, [l.id]);
+    expect((decisions as unknown[]).length).toBe(0);
+    expect((audit as unknown[]).length).toBe(0);
+  });
+
+  it("says the same thing twice, so a repeat cannot confirm it once existed", async () => {
+    const l = await fresh();
+    expect(await store.deleteUploadedLedger(l.id, OWNER)).toBe(true);
+    expect(await store.deleteUploadedLedger(l.id, OWNER)).toBe(false);
+    expect(await store.deleteUploadedLedger("00000000-0000-4000-8000-000000000000", OWNER)).toBe(false);
+  });
+
+  it("cannot reach the demo, whatever it is asked", async () => {
+    const rows = generateLedger().rows;
+    const demo = await store.createLedger("demo", "not yours to delete", rows, detect(rows).findings);
+    expect(await store.deleteUploadedLedger(demo.id, OWNER)).toBe(false);
+    expect((await store.readLedger("demo", demo.id, store.ANONYMOUS))?.id).toBe(demo.id);
+  });
+
+  it("refuses a malformed id without querying for it", async () => {
+    expect(await store.deleteUploadedLedger("../../etc/passwd", OWNER)).toBe(false);
+  });
+});

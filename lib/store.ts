@@ -306,6 +306,40 @@ export const SAMPLE_NAME = "Sample export — Xero-style headers";
  * function into that fix by accident would be the easiest possible mistake, so
  * it names one string and takes no arguments.
  */
+/**
+ * Delete an uploaded ledger, its decisions and its audit trail.
+ *
+ * Promised in Part 03 in a public video and on a public page, and built in Part
+ * 04 with the owner column that makes it possible: until a ledger recorded whose
+ * it was, there was nobody this could safely be offered to.
+ *
+ * ONLY THE PERSON WHOSE LEDGER IT IS. Not the instance owner, who can read it.
+ * Reading someone's data to help them and destroying it are different powers,
+ * and the second one leaves nothing behind to check: the ledger's audit rows go
+ * with it, so a deletion by anybody else would be unprovable afterwards. If
+ * running the instance ever needs to remove somebody's data, that should be a
+ * deliberate operator action with its own record, not this button.
+ *
+ * It genuinely goes. The decisions and the audit cascade from the foreign keys.
+ * That is the point rather than a side effect — a delete that keeps a shadow
+ * copy is not the thing the upload page will now promise.
+ *
+ * Returns false when there is nothing to delete or it is not this person's, and
+ * the caller cannot tell those apart, for the same reason readLedger cannot.
+ */
+export async function deleteUploadedLedger(id: string, viewer: Viewer): Promise<boolean> {
+  if (!UUID.test(id)) return false;
+  await ensureSchema();
+  if (!viewer.email) return false;
+  const done = (await sql.query(
+    `delete from ${T.ledgers}
+      where id = $1 and namespace = 'uploads' and lower(owner_email) = lower($2)
+      returning id`,
+    [id, viewer.email],
+  )) as {id: string}[];
+  return done.length === 1;
+}
+
 export async function removeSampleLedgers(): Promise<void> {
   await ensureSchema();
   await sql.query(

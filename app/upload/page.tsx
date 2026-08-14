@@ -110,7 +110,10 @@ export default async function Upload() {
           It is uploaded to this application&rsquo;s own server and held in its
           database until you confirm the mapping, then deleted — and swept after
           six hours if you never confirm. What is kept is the parsed rows and the
-          findings, and there is not yet a way for you to delete those yourself.
+          findings. They belong to the address you signed in with, nobody else
+          can open them, and <strong>Delete this ledger</strong> at the top of
+          your review queue removes the rows, the findings, the decisions and the
+          audit trail. Nothing is kept.
           It goes nowhere else: no third party sees it, nothing is sent to a
           model, and Countercheck has no write path back to any finance system.
           If a finding is real, a person acts on it.
