@@ -7,7 +7,7 @@ import {generateLedger} from "../src/demo/generate";
 import {importCsv, FIELDS, type DateOrder, type Field} from "../src/import/csv";
 import {
   createLedger, discardPending, listLedgers, readPending, recordDecision,
-  resetDemo, savePending, removeSampleLedgers, SAMPLE_NAME,
+  resetDemo, savePending, removeSampleLedgers, SAMPLE_NAME, ANONYMOUS,
   type Decision, type Ledger,
 } from "../lib/store";
 import {requireUser} from "../lib/session";
@@ -32,7 +32,7 @@ function buildDemoSeed() {
 
 /** The demo ledger is seeded on first view so the app is never empty. */
 export async function ensureDemoLedger(): Promise<Ledger> {
-  const existing = await listLedgers("demo");
+  const existing = await listLedgers("demo", ANONYMOUS);
   if (existing.length) return existing[0];
   const seed = buildDemoSeed();
   return await createLedger("demo", seed.name, seed.invoices, seed.findings);
@@ -139,7 +139,10 @@ export async function confirmImport(_prev: unknown, form: FormData): Promise<Imp
   // Gated separately rather than trusting that stageUpload ran first. A pending
   // id is a UUID in a URL, and "the earlier step checked" is how the check gets
   // skipped.
-  await requireUser();
+  //
+  // The address is kept now rather than discarded: it becomes the ledger's
+  // owner, and it is the only thing that makes a later access decision possible.
+  const uploader = await requireUser();
   const id = String(form.get("pendingId") ?? "");
   const pending = id ? await readPending(id) : null;
   if (!pending) return {error: "That upload has expired. Choose the file again."};
@@ -182,7 +185,7 @@ export async function confirmImport(_prev: unknown, form: FormData): Promise<Imp
   // cannot reconcile against their own export is worse than no count at all.
   const skipped = new Set(result.errors.map((e) => e.row)).size;
   const name = `${pending.name} — ${result.rows.length.toLocaleString()} rows${skipped ? `, ${skipped} skipped` : ""}`;
-  const ledger = await createLedger("uploads", name, result.rows, findings);
+  const ledger = await createLedger("uploads", name, result.rows, findings, uploader);
 
   await discardPending(id);
   revalidatePath("/");
@@ -204,7 +207,9 @@ export async function confirmImport(_prev: unknown, form: FormData): Promise<Imp
  * dealt with in Part 03.
  */
 export async function loadSampleLedger() {
-  if (!(await isOwner())) throw new Error("not yours to load");
+  /* requireOwner rather than isOwner: it returns the address, which the sample
+     ledger now needs as its owner. The fixture is the instance owner's. */
+  const owner = await requireOwner();
 
   const result = importCsv(SAMPLE_CSV, {dateOrder: "dmy"});
   if (result.errors.length) {
@@ -213,7 +218,7 @@ export async function loadSampleLedger() {
   const {findings} = detect(result.rows);
 
   await removeSampleLedgers();
-  const ledger = await createLedger("uploads", SAMPLE_NAME, result.rows, findings);
+  const ledger = await createLedger("uploads", SAMPLE_NAME, result.rows, findings, owner);
   revalidatePath("/");
   redirect(`/review/uploads/${ledger.id}`);
 }

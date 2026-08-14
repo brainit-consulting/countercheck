@@ -1,5 +1,5 @@
 import {afterAll, beforeAll, describe, expect, it} from "vitest";
-import type {Ledger} from "../lib/store";
+import type {Ledger, Viewer} from "../lib/store";
 import fs from "node:fs";
 
 /**
@@ -43,19 +43,23 @@ afterAll(async () => {
   await db.sql.query(`drop schema if exists ${SCHEMA} cascade`);
 });
 
+/** The address the fixture belongs to, and a second person who is not them. */
+const OWNER: Viewer = {email: "owner@example.test", isInstanceOwner: false};
+const STRANGER: Viewer = {email: "stranger@example.test", isInstanceOwner: false};
+
 let ledger: Awaited<ReturnType<typeof makeLedger>>;
 
 async function makeLedger() {
   const demo = generateLedger();
   const {findings} = detect(demo.rows);
-  return store.createLedger("uploads", "invariant fixture", demo.rows, findings);
+  return store.createLedger("uploads", "invariant fixture", demo.rows, findings, OWNER.email!);
 }
 
 beforeAll(async () => {
   ledger = await makeLedger();
 });
 
-const reread = async () => (await store.readLedger("uploads", ledger.id))!;
+const reread = async () => (await store.readLedger("uploads", ledger.id, OWNER))!;
 
 const accountsForEverything = (l: Ledger) => {
   const t = store.totals(l);
@@ -131,19 +135,19 @@ describe("every finding and every pound is in exactly one column", () => {
 
 describe("the demo reset cannot reach uploaded data", () => {
   it("leaves the uploads namespace alone", async () => {
-    const before = (await store.listLedgers("uploads")).map((l) => l.id).sort();
+    const before = (await store.listLedgers("uploads", OWNER)).map((l) => l.id).sort();
     await store.resetDemo(() => {
       const demo = generateLedger();
       return {name: "demo", invoices: demo.rows, findings: detect(demo.rows).findings};
     });
-    expect((await store.listLedgers("uploads")).map((l) => l.id).sort()).toEqual(before);
+    expect((await store.listLedgers("uploads", OWNER)).map((l) => l.id).sort()).toEqual(before);
   });
 });
 
 describe("ids from the browser are not trusted", () => {
   it("refuses a traversal attempt instead of querying for it", async () => {
-    expect(await store.readLedger("uploads", "../../../../etc/passwd")).toBeNull();
-    expect(await store.readLedger("uploads", "not-a-uuid")).toBeNull();
+    expect(await store.readLedger("uploads", "../../../../etc/passwd", OWNER)).toBeNull();
+    expect(await store.readLedger("uploads", "not-a-uuid", OWNER)).toBeNull();
     expect(await store.readPending("../../secrets")).toBeNull();
   });
 });
@@ -154,5 +158,74 @@ describe("a finding key invented in the browser cannot create a decision", () =>
     expect(await store.recordDecision("uploads", ledger.id, "made-up:key", "accepted", "attacker")).toBeNull();
     // And it wrote nothing on the way out.
     expect((await reread()).audit.length).toBe(before);
+  });
+});
+
+/**
+ * The exposure found on 2026-08-13.
+ *
+ * The deployed application served every uploaded ledger to anonymous visitors:
+ * supplier names, invoice numbers, amounts, four digits of a bank account.
+ * Nothing was misconfigured. There was no column recording whose ledger it was,
+ * so there was no check anybody could have written.
+ *
+ * These are about reading, because reading was the path nobody had to think
+ * about. Signing in arrived in Part 02 and it protected deciding and uploading.
+ */
+describe("an uploaded ledger belongs to the address that uploaded it", () => {
+  it("is refused to an anonymous visitor", async () => {
+    expect(await store.readLedger("uploads", ledger.id, store.ANONYMOUS)).toBeNull();
+  });
+
+  it("is refused to a different signed-in person", async () => {
+    expect(await store.readLedger("uploads", ledger.id, STRANGER)).toBeNull();
+  });
+
+  it("is readable by the person who uploaded it", async () => {
+    expect((await store.readLedger("uploads", ledger.id, OWNER))?.id).toBe(ledger.id);
+  });
+
+  it("is readable by the owner of the instance", async () => {
+    expect((await store.readLedger("uploads", ledger.id, {email: "other@example.test", isInstanceOwner: true}))?.id)
+      .toBe(ledger.id);
+  });
+
+  it("does not appear in a list for anyone else", async () => {
+    expect((await store.listLedgers("uploads", store.ANONYMOUS)).map((l) => l.id)).not.toContain(ledger.id);
+    expect((await store.listLedgers("uploads", STRANGER)).map((l) => l.id)).not.toContain(ledger.id);
+    expect((await store.listLedgers("uploads", OWNER)).map((l) => l.id)).toContain(ledger.id);
+  });
+
+  it("matches the address case-insensitively, because email is", async () => {
+    const shouty = {email: OWNER.email!.toUpperCase(), isInstanceOwner: false};
+    expect((await store.readLedger("uploads", ledger.id, shouty))?.id).toBe(ledger.id);
+  });
+
+  /**
+   * Not-yours has to be indistinguishable from not-there. A 403 confirms the id
+   * names a real ledger, which is itself a fact about somebody else's data.
+   */
+  it("answers the same for someone else's ledger as for one that does not exist", async () => {
+    expect(await store.readLedger("uploads", "00000000-0000-4000-8000-000000000000", OWNER)).toBeNull();
+    expect(await store.readLedger("uploads", ledger.id, STRANGER)).toBeNull();
+  });
+
+  /** The demo is public on purpose, and the namespace is the boundary. */
+  it("still lets anyone read the demo", async () => {
+    const rows = generateLedger().rows;
+    const d = await store.createLedger("demo", "public demo", rows, detect(rows).findings);
+    expect((await store.readLedger("demo", d.id, store.ANONYMOUS))?.id).toBe(d.id);
+  });
+
+  it("refuses to create an upload with nobody to own it", async () => {
+    const rows = generateLedger().rows;
+    await expect(store.createLedger("uploads", "ownerless", rows, detect(rows).findings))
+      .rejects.toThrow(/must record whose it is/);
+  });
+
+  it("refuses to give the demo an owner", async () => {
+    const rows = generateLedger().rows;
+    await expect(store.createLedger("demo", "owned demo", rows, detect(rows).findings, OWNER.email!))
+      .rejects.toThrow(/belongs to nobody/);
   });
 });

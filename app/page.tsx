@@ -1,6 +1,6 @@
 import {ensureDemoLedger} from "./actions";
 import {ledgerCurrency, listLedgers, totals, SAMPLE_NAME, type Ledger} from "../lib/store";
-import {isOwner} from "../lib/owner";
+import {currentViewer, isOwner} from "../lib/owner";
 import {SampleButton} from "./sample-button";
 import {money, mixed} from "../lib/money";
 import {ResetDemoButton} from "./reset-button";
@@ -17,8 +17,10 @@ const fmt = (ledger: Ledger) => {
 
 export default async function Home() {
   const demo = await ensureDemoLedger();
-  const uploads = await listLedgers("uploads");
   const owner = await isOwner();
+  /* Only the ledgers this person may read. Before 2026-08-13 this listed every
+     upload to every visitor, which is how the exposure was reachable at all. */
+  const uploads = await listLedgers("uploads", await currentViewer());
   const sampleLoaded = uploads.some((l) => l.name === SAMPLE_NAME);
   const t = totals(demo);
   const gbp = fmt(demo);

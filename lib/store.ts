@@ -47,6 +47,12 @@ export type Ledger = {
   rowCount: number;
   invoices: Invoice[];
   findings: ReviewedFinding[];
+  /**
+   * Whose it is. Null for demo ledgers, which belong to nobody and are readable
+   * by everyone on purpose, and null for uploads that predate 2026-08-13 — see
+   * the column's comment in `db.ts` for why null is the closed case.
+   */
+  ownerEmail: string | null;
   /** Append-only. Every decision, in order, never rewritten. */
   audit: {at: string; who: string; action: string; detail: string}[];
 };
@@ -64,6 +70,7 @@ const iso = (v: unknown): string =>
 type LedgerRow = {
   id: string; namespace: Namespace; name: string; created_at: unknown;
   row_count: number; invoices: Invoice[]; findings: ReviewedFinding[];
+  owner_email: string | null;
 };
 type DecisionRow = {
   ledger_id: string; finding_key: string; decision: Decision;
@@ -80,6 +87,7 @@ function assemble(row: LedgerRow, decisions: DecisionRow[], audit: AuditRow[]): 
     name: row.name,
     createdAt: iso(row.created_at),
     rowCount: row.row_count,
+    ownerEmail: row.owner_email ?? null,
     invoices: row.invoices,
     findings: row.findings.map((f) => {
       const d = byKey.get(f.key);
@@ -96,7 +104,55 @@ function assemble(row: LedgerRow, decisions: DecisionRow[], audit: AuditRow[]): 
   };
 }
 
-export async function readLedger(ns: Namespace, id: string): Promise<Ledger | null> {
+/**
+ * Who is asking. Every read of a ledger now has to say.
+ *
+ * It is a required argument rather than an optional one so that adding a screen
+ * cannot accidentally add a hole: a call site that does not pass a viewer does
+ * not compile. The exposure this closes existed because reads were the one path
+ * nobody had to think about.
+ */
+export type Viewer = {email: string | null; isInstanceOwner: boolean};
+
+/** A viewer for the paths that are public by design. Demo only — it can read nothing else. */
+export const ANONYMOUS: Viewer = {email: null, isInstanceOwner: false};
+
+/**
+ * Demo ledgers are public. Uploads belong to the address that uploaded them.
+ *
+ * An upload with no recorded owner is readable only by the instance owner. Rows
+ * written before 2026-08-13 have no owner, and treating them as public would be
+ * deciding on somebody else's behalf that their payment data is everyone's.
+ */
+export function mayRead(
+  ledger: {namespace: Namespace; ownerEmail: string | null},
+  viewer: Viewer,
+): boolean {
+  if (ledger.namespace === "demo") return true;
+  if (viewer.isInstanceOwner) return true;
+  if (!ledger.ownerEmail || !viewer.email) return false;
+  return ledger.ownerEmail.toLowerCase() === viewer.email.toLowerCase();
+}
+
+export async function readLedger(ns: Namespace, id: string, viewer: Viewer): Promise<Ledger | null> {
+  const ledger = await readLedgerUnchecked(ns, id);
+  if (!ledger) return null;
+  /* Not yours is indistinguishable from not there. A 403 confirms the id names
+     a real ledger, which is a fact about somebody else's data. */
+  if (!mayRead(ledger, viewer)) return null;
+  return ledger;
+}
+
+/**
+ * The same read with no access decision, for the two paths that have already
+ * made one: returning the ledger a caller just created, and returning the one
+ * whose decision they were just authorised to record.
+ *
+ * Not exported. A second exported way to read a ledger is a second place for the
+ * check to be forgotten, and forgetting it once is what this whole change is
+ * about.
+ */
+async function readLedgerUnchecked(ns: Namespace, id: string): Promise<Ledger | null> {
   if (!UUID.test(id)) return null;   // a malformed id is a 404, not a crash
   await ensureSchema();
   const rows = (await sql.query(
@@ -112,11 +168,14 @@ export async function readLedger(ns: Namespace, id: string): Promise<Ledger | nu
   return assemble(rows[0], decisions, audit);
 }
 
-export async function listLedgers(ns: Namespace): Promise<Ledger[]> {
+export async function listLedgers(ns: Namespace, viewer: Viewer): Promise<Ledger[]> {
   await ensureSchema();
-  const rows = (await sql.query(
+  const all = (await sql.query(
     `select * from ${T.ledgers} where namespace = $1 order by created_at desc`, [ns],
   )) as LedgerRow[];
+  /* Filtered here rather than in SQL so that one function decides who may read
+     a ledger, and both paths ask it the same question. */
+  const rows = all.filter((r) => mayRead({namespace: r.namespace, ownerEmail: r.owner_email ?? null}, viewer));
   if (!rows.length) return [];
   const ids = rows.map((r) => r.id);
   // Two queries for the whole page rather than two per ledger.
@@ -132,15 +191,24 @@ export async function listLedgers(ns: Namespace): Promise<Ledger[]> {
 
 export async function createLedger(
   ns: Namespace, name: string, invoices: Invoice[], findings: Finding[],
+  /**
+   * The address this ledger belongs to. Required for uploads and refused for
+   * demo, so neither can be got wrong by omission: a demo ledger with an owner
+   * would stop being the public demonstration, and an upload without one is the
+   * defect this argument exists to prevent.
+   */
+  ownerEmail: string | null = null,
 ): Promise<Ledger> {
+  if (ns === "uploads" && !ownerEmail) throw new Error("an uploaded ledger must record whose it is");
+  if (ns === "demo" && ownerEmail) throw new Error("the demo ledger belongs to nobody");
   await ensureSchema();
   const id = randomUUID();
   const at = new Date().toISOString();
   const withKeys = findings.map((f) => ({...f, key: findingKey(f)}));
   await sql.query(
-    `insert into ${T.ledgers} (id, namespace, name, created_at, row_count, invoices, findings)
-     values ($1, $2, $3, $4, $5, $6, $7)`,
-    [id, ns, name, at, invoices.length, JSON.stringify(invoices), JSON.stringify(withKeys)],
+    `insert into ${T.ledgers} (id, namespace, name, created_at, row_count, invoices, findings, owner_email)
+     values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [id, ns, name, at, invoices.length, JSON.stringify(invoices), JSON.stringify(withKeys), ownerEmail],
   );
   await sql.query(
     `insert into ${T.audit} (ledger_id, at, who, action, detail) values ($1, $2, $3, $4, $5)`,
@@ -148,7 +216,7 @@ export async function createLedger(
       `${invoices.length.toLocaleString()} invoice${invoices.length === 1 ? "" : "s"}, ` +
       `${findings.length} finding${findings.length === 1 ? "" : "s"}`],
   );
-  return (await readLedger(ns, id))!;
+  return (await readLedgerUnchecked(ns, id))!;
 }
 
 /** `decision: null` reopens: the finding goes back to the queue undecided. */
@@ -200,7 +268,7 @@ export async function recordDecision(
     [ledgerId, at, who, decision ?? "reopened",
       `${finding.ruleId} — ${finding.explanation}${reason ? ` (${reason})` : ""}`],
   );
-  return readLedger(ns, ledgerId);
+  return readLedgerUnchecked(ns, ledgerId);
 }
 
 /**

@@ -1,4 +1,5 @@
 import {currentUser} from "./session";
+import type {Viewer} from "./store";
 
 /**
  * Who owns this instance.
@@ -36,6 +37,17 @@ export async function isOwner(): Promise<boolean> {
   if (!OWNERS.length) return false;      // unset means nobody, never everybody
   const who = await currentUser();
   return who !== null && OWNERS.includes(who.toLowerCase());
+}
+
+/**
+ * Who is asking, for the store's read checks.
+ *
+ * One place builds this, so every screen asks the same question. Added
+ * 2026-08-13 with the ledger owner column, after the deployed application was
+ * found serving every uploaded ledger to anonymous visitors.
+ */
+export async function currentViewer(): Promise<Viewer> {
+  return {email: await currentUser(), isInstanceOwner: await isOwner()};
 }
 
 /**

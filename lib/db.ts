@@ -67,6 +67,27 @@ export function ensureSchema(): Promise<void> {
       )
     `);
 
+    /**
+     * Whose ledger this is.
+     *
+     * Added 2026-08-13, after the deployed application was found serving every
+     * uploaded ledger to anonymous visitors — supplier names, amounts and four
+     * digits of a bank account. The defect was not a missing check. It was that
+     * nothing recorded whose ledger it was, so there was no check to write.
+     * **An access decision needs something to decide against.**
+     *
+     * Nullable, and null is the closed case rather than the open one. Rows that
+     * predate this column have no recorded owner, and the read path treats an
+     * unowned upload as readable only by the instance owner. Anything else would
+     * mean choosing, on behalf of whoever uploaded it, that their data is public
+     * because we did not write it down at the time.
+     *
+     * Demo ledgers are owned by nobody and readable by everyone on purpose. That
+     * is the product's public demonstration and the namespace is the boundary.
+     */
+    await sql.query(`alter table ${T.ledgers} add column if not exists owner_email text`);
+    await sql.query(`create index if not exists ledgers_owner_idx on ${T.ledgers} (namespace, owner_email)`);
+
     // Decisions are their own table rather than a field inside the findings
     // document, so that "reopened" is a row that goes away and the finding
     // underneath it is untouched. Primary key is the finding key, which is

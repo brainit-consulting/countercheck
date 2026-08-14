@@ -1,6 +1,7 @@
 import {notFound} from "next/navigation";
 import {ledgerCurrency, readLedger, type Namespace} from "../../../../lib/store";
 import {money, mixed} from "../../../../lib/money";
+import {currentViewer} from "../../../../lib/owner";
 
 /**
  * The rows, as read.
@@ -24,7 +25,7 @@ export default async function Ledger({params, searchParams}: {
   const {namespace, id} = await params;
   const {supplier} = await searchParams;
   if (namespace !== "demo" && namespace !== "uploads") notFound();
-  const ledger = await readLedger(namespace as Namespace, id);
+  const ledger = await readLedger(namespace as Namespace, id, await currentViewer());
   if (!ledger) notFound();
 
   const code = ledgerCurrency(ledger);

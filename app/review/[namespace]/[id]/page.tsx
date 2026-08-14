@@ -3,11 +3,12 @@ import {ledgerCurrency, readLedger, totals, type Namespace} from "../../../../li
 import {money, mixed, isoDate} from "../../../../lib/money";
 import {FindingCard} from "./finding-card";
 import {currentUser} from "../../../../lib/session";
+import {currentViewer} from "../../../../lib/owner";
 
 export default async function Review({params}: {params: Promise<{namespace: string; id: string}>}) {
   const {namespace, id} = await params;
   if (namespace !== "demo" && namespace !== "uploads") notFound();
-  const ledger = await readLedger(namespace as Namespace, id);
+  const ledger = await readLedger(namespace as Namespace, id, await currentViewer());
   const signedIn = (await currentUser()) !== null;
   if (!ledger) notFound();
 
